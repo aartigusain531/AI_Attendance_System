@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Attendance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            background: #0f172a;
+            color: #e2e8f0;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 40px;
+            background: #111827;
+        }
+        nav .logo {
+            color: #00ffff;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        nav ul {
+            list-style: none;
+            display: flex;
+            gap: 18px;
+            margin: 0;
+            padding: 0;
+        }
+        nav ul li a {
+            color: #cbd5e1;
+            text-decoration: none;
+        }
+        .container {
+            width: 90%;
+            max-width: 1000px;
+            margin: 40px auto;
+            display: grid;
+            gap: 24px;
+        }
+        .card {
+            background: rgba(15, 23, 42, 0.95);
+            padding: 24px;
+            border-radius: 18px;
+            border: 1px solid #1e293b;
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.35);
+        }
+        .card h2 {
+            color: #22d3ee;
+            margin-bottom: 18px;
+        }
+        video {
+            width: 100%;
+            border-radius: 16px;
+            border: 2px solid #22d3ee;
+            background: black;
+        }
+        .status {
+            margin-top: 18px;
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(30, 41, 59, 0.8);
+            color: #e2e8f0;
+            font-size: 16px;
+        }
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: 10px;
+            padding: 14px 22px;
+            background: #22d3ee;
+            color: #0f172a;
+            font-weight: 700;
+            font-size: 16px;
+            margin-top: 16px;
+        }
+        audio {
+            width: 100%;
+            margin-top: 18px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">🤖 AI Attendance</div>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="/register">Register</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <h2>Automatic Face + Voice Attendance</h2>
+            <p>
+                The camera will look for a registered student. When their face is recognized, the system will automatically record a short voice sample and submit attendance.
+            </p>
+            <video id="video" autoplay playsinline muted></video>
+            <div class="status" id="status">Initializing camera...</div>
+            <button id="retryButton" type="button" onclick="startRecognition()" style="display:none;">Try Again</button>
+            <button id="useVoiceButton" type="button" style="display:none;margin-left:10px;" onclick="useVoiceOnly()">Use Voice Only</button>
+            <button id="backButton" type="button" style="display:none;margin-left:10px;" onclick="resetToCamera()">Back</button>
+            <button id="overrideButton" type="button" style="display:none;margin-left:10px;background:#ffb86b;color:black;" onclick="markPresentAnyway()">Mark Present Anyway</button>
+            <audio id="audioPlayer" controls></audio>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById("video");
+        const statusEl = document.getElementById("status");
+        const retryButton = document.getElementById("retryButton");
+        const useVoiceButton = document.getElementById("useVoiceButton");
+        const audioPlayer = document.getElementById("audioPlayer");
+        const overrideButton = document.getElementById('overrideButton');
+
+        let recognitionInterval;
+        let currentlyRecognizing = false;
+        let attendanceInProgress = false;
+        let recognizedStudent = null;
+
+        function getMedia(constraints) {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                return navigator.mediaDevices.getUserMedia(constraints);
+            }
+            const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+            if (!legacy) {
+                return Promise.reject(new Error("getUserMedia is not supported."));
+            }
+            return new Promise((resolve, reject) => {
+                legacy.call(navigator, constraints, resolve, reject);
+            });
+        }
+
+        async function initCamera() {
+            try {
+                const stream = await getMedia({ video: true });
+                video.srcObject = stream;
+                statusEl.textContent = "🎥 Camera ready. Looking for a registered student...";
+                startRecognition();
+                // hide voice-only option when camera works
+                if (useVoiceButton) useVoiceButton.style.display = "none";
+            } catch (err) {
+                statusEl.textContent = "⚠️ Camera access denied or unavailable.";
+                retryButton.style.display = "inline-block";
+                if (useVoiceButton) useVoiceButton.style.display = "inline-block";
+                console.error(err);
+            }
+        }
+
+        function startRecognition() {
+            retryButton.style.display = "none";
+            statusEl.textContent = "🔎 Searching for a registered student...";
+            if (recognitionInterval) {
+                clearInterval(recognitionInterval);
+            }
+            recognitionInterval = setInterval(tryAutoRecognize, 3000);
+        }
+
+        function stopCamera(){
+            try{
+                if (video && video.srcObject){
+                    const tracks = video.srcObject.getTracks();
+                    tracks.forEach(t=>{ try{ t.stop(); }catch(e){} });
+                    video.srcObject = null;
+                }
+                // hide preview to indicate camera is off
+                if (video) video.style.display = 'none';
+            }catch(e){ console.warn('stopCamera failed', e); }
+        }
+
+        function captureFrameDataURL() {
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext("2d");
+            ctx.save();
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+            ctx.restore();
+            return canvas.toDataURL("image/jpeg");
+        }
+
+        async function tryAutoRecognize() {
+            if (currentlyRecognizing || attendanceInProgress) {
+                return;
+            }
+            if (!video.srcObject) {
+                return;
+            }
+            currentlyRecognizing = true;
+            statusEl.textContent = "🔎 Recognizing face...";
+
+            try {
+                const image = captureFrameDataURL();
+                const response = await fetch("/api/recognize_face", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ image })
+                });
+                const data = await response.json();
+
+                if (data.recognized && data.student) {
+                    recognizedStudent = data.student;
+                    clearInterval(recognitionInterval);
+                    statusEl.textContent = `✅ Recognized ${data.student.name}. Recording voice for attendance...`;
+                    // keep camera running so preview remains visible
+                    await recordVoiceAndSubmit();
+                } else {
+                    statusEl.textContent = "🔎 Face not recognized. Trying voice fallback...";
+                    clearInterval(recognitionInterval);
+                    await recordVoiceFallback();
+                }
+            } catch (err) {
+                console.error("Recognition failed:", err);
+                statusEl.textContent = "⚠️ Face recognition error. Retrying...";
+            } finally {
+                currentlyRecognizing = false;
+            }
+        }
+
+        async function recordVoiceAndSubmit() {
+            if (!recognizedStudent || attendanceInProgress) {
+                return;
+            }
+            attendanceInProgress = true;
+
+            try {
+                const stream = await getMedia({ audio: true });
+                const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
+                const recorder = new MediaRecorder(stream, { mimeType });
+                const chunks = [];
+
+                recorder.ondataavailable = event => {
+                    if (event.data && event.data.size > 0) {
+                        chunks.push(event.data);
+                    }
+                };
+
+                recorder.onstop = async () => {
+                    const blob = new Blob(chunks, { type: mimeType });
+                    const url = URL.createObjectURL(blob);
+                    audioPlayer.src = url;
+                    audioPlayer.style.display = "block";
+
+                    const reader = new FileReader();
+                    reader.onloadend = async () => {
+                        const voiceData = reader.result;
+                        await submitAttendance(voiceData);
+                    };
+                    reader.readAsDataURL(blob);
+                };
+
+                recorder.start();
+                statusEl.textContent = "🎤 Recording your voice for verification...";
+                setTimeout(() => {
+                    recorder.stop();
+                    stream.getTracks().forEach(track => track.stop());
+                }, 5000);
+            } catch (err) {
+                console.error("Voice recording failed:", err);
+                statusEl.textContent = "⚠️ Microphone access denied or unavailable.";
+                retryButton.style.display = "inline-block";
+                attendanceInProgress = false;
+            }
+        }
+
+        async function recordVoiceFallback() {
+            if (attendanceInProgress) {
+                return;
+            }
+            attendanceInProgress = true;
+            statusEl.textContent = "🎤 Recording voice for fallback verification...";
+
+            try {
+                const stream = await getMedia({ audio: true });
+                const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
+                const recorder = new MediaRecorder(stream, { mimeType });
+                const chunks = [];
+
+                recorder.ondataavailable = event => {
+                    if (event.data && event.data.size > 0) {
+                        chunks.push(event.data);
+                    }
+                };
+
+                recorder.onstop = async () => {
+                    const blob = new Blob(chunks, { type: mimeType });
+                    const url = URL.createObjectURL(blob);
+                    audioPlayer.src = url;
+                    audioPlayer.style.display = "block";
+
+                    const reader = new FileReader();
+                    reader.onloadend = async () => {
+                        const voiceData = reader.result;
+                        await submitVoiceFallback(voiceData);
+                    };
+                    reader.readAsDataURL(blob);
+                };
+
+                recorder.start();
+                setTimeout(() => {
+                    recorder.stop();
+                    stream.getTracks().forEach(track => track.stop());
+                }, 5000);
+            } catch (err) {
+                console.error("Fallback voice recording failed:", err);
+                statusEl.textContent = "⚠️ Microphone access denied or unavailable.";
+                retryButton.style.display = "inline-block";
+                attendanceInProgress = false;
+            }
+        }
+
+        // Explicit voice-only flow (user-triggered)
+        function useVoiceOnly(){
+            // stop camera recognition if running
+            if (recognitionInterval) { clearInterval(recognitionInterval); recognitionInterval = null; }
+            statusEl.textContent = "🎤 Voice-only mode: recording...";
+            recordVoiceFallback();
+        }
+
+        async function submitVoiceFallback(voiceData) {
+            statusEl.textContent = "📤 Submitting fallback voice sample...";
+            try {
+                const response = await fetch("/api/recognize_voice", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ voice: voiceData })
+                });
+                const result = await response.json();
+
+                if (result.recognized) {
+                    const pct = result.score? (Number(result.score)*100).toFixed(1) + '%':'?';
+                    statusEl.textContent = `✅ Voice matched ${result.student.name}. Confidence: ${pct}. ${result.message || "Attendance recorded."}`;
+                } else {
+                    statusEl.textContent = `⚠️ ${result.message || "Voice not recognized."}`;
+                    retryButton.style.display = "inline-block";
+                    // fetch best candidate for manual override
+                    try{
+                        const bm = await fetch('/api/voice_best_match', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({voice: voiceData})});
+                        const jb = await bm.json();
+                        if (jb.matched && jb.student){
+                            statusEl.textContent += ` Closest: ${jb.student.name} (${jb.student.roll_number}) — ${(Number(jb.score)*100).toFixed(1)}%`;
+                            overrideButton.style.display = 'inline-block';
+                            overrideButton.dataset.roll = jb.student.roll_number;
+                        }
+                    }catch(e){ console.warn('best match fetch failed', e); }
+                }
+            } catch (err) {
+                console.error("Voice fallback failed:", err);
+                statusEl.textContent = "⚠️ Voice fallback submission error.";
+                retryButton.style.display = "inline-block";
+            } finally {
+                attendanceInProgress = false;
+                if (backButton) backButton.style.display = 'inline-block';
+            }
+        }
+
+        async function submitAttendance(voiceData) {
+            statusEl.textContent = "📤 Submitting attendance...";
+
+            try {
+                const response = await fetch("/api/mark_attendance", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        roll_number: recognizedStudent.roll_number,
+                        voice: voiceData
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const pct = result.score? (Number(result.score)*100).toFixed(1) + '%':'?';
+                    statusEl.textContent = `✅ Attendance marked for ${recognizedStudent.name}. Voice match: ${pct}`;
+                } else {
+                    statusEl.textContent = `⚠️ ${result.message}`;
+                    retryButton.style.display = "inline-block";
+                }
+            } catch (err) {
+                console.error("Attendance submit failed:", err);
+                statusEl.textContent = "⚠️ Attendance submission error.";
+                retryButton.style.display = "inline-block";
+            } finally {
+                attendanceInProgress = false;
+                if (backButton) backButton.style.display = 'inline-block';
+                // ensure override button hidden until new result
+                if (overrideButton) overrideButton.style.display = 'none';
+            }
+        }
+
+        async function markPresentAnyway(){
+            const roll = overrideButton && overrideButton.dataset && overrideButton.dataset.roll;
+            if (!roll) return;
+            overrideButton.disabled = true;
+            try{
+                const res = await fetch('/api/mark_attendance_override', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({roll_number: roll})});
+                const js = await res.json();
+                if (js.success){
+                    statusEl.textContent = `✅ Attendance forced for ${roll}.`;
+                } else {
+                    statusEl.textContent = `⚠️ ${js.message || 'Unable to force attendance'}`;
+                }
+            }catch(e){
+                console.error(e);
+                statusEl.textContent = '⚠️ Override failed';
+            }finally{
+                overrideButton.disabled = false;
+                overrideButton.style.display = 'none';
+                if (backButton) backButton.style.display = 'inline-block';
+            }
+        }
+
+        function resetToCamera(){
+            // hide back button and audio
+            try{
+                if (backButton) backButton.style.display = 'none';
+                if (audioPlayer){ audioPlayer.style.display = 'none'; audioPlayer.src = ''; }
+                recognizedStudent = null;
+                attendanceInProgress = false;
+                currentlyRecognizing = false;
+                // show and restart camera
+                if (video) video.style.display = 'block';
+                initCamera();
+            }catch(e){ console.warn('resetToCamera failed', e); }
+        }
+
+        window.onload = initCamera;
+    </script>
+</body>
+</html>

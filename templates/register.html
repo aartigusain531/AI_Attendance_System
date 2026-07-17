@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Register Student</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+<style>
+
+.container{
+    width:90%;
+    max-width:1200px;
+    margin:40px auto;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:30px;
+}
+
+.card{
+    background:rgba(255,255,255,.08);
+    padding:25px;
+    border-radius:15px;
+    backdrop-filter:blur(10px);
+}
+
+.card h2{
+    color:#00ffff;
+    margin-bottom:20px;
+}
+
+input,select{
+
+    width:100%;
+    padding:12px;
+    margin:10px 0;
+    border:none;
+    border-radius:8px;
+    background:#101b35;
+    color:white;
+    font-size:16px;
+
+}
+
+button{
+
+    width:100%;
+    padding:15px;
+    margin-top:15px;
+    background:#00ffff;
+    color:black;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:18px;
+    font-weight:bold;
+
+}
+
+button:hover{
+
+    background:#00d4ff;
+
+}
+
+video{
+
+    width:100%;
+    border-radius:15px;
+    transform: scaleX(-1);
+    border:3px solid cyan;
+
+}
+
+canvas{
+
+    display:none;
+
+}
+
+.status{
+
+    text-align:center;
+    margin-top:20px;
+    color:#00ff88;
+    font-size:18px;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<nav>
+
+<div class="logo">🤖 AI Attendance</div>
+
+<ul>
+
+<li><a href="/">Home</a></li>
+<li><a href="/dashboard">Dashboard</a></li>
+
+</ul>
+
+</nav>
+
+<div class="container">
+
+<div class="card">
+
+<h2>Student Registration</h2>
+
+<form action="/register" method="POST" id="registerForm">
+
+<input
+id="name"
+type="text"
+name="name"
+placeholder="Student Name"
+required>
+
+<input
+id="roll"
+type="text"
+name="roll"
+placeholder="Roll Number"
+required>
+
+<input
+id="department"
+type="text"
+name="department"
+placeholder="Department"
+required>
+
+<input
+id="year"
+type="text"
+name="year"
+placeholder="Year"
+required>
+
+<input
+id="phone"
+type="text"
+name="phone"
+placeholder="Phone Number">
+
+<input
+id="email"
+type="email"
+name="email"
+placeholder="Email">
+
+<button type="submit">
+
+Register Student
+
+</button>
+<input type="hidden" name="image" id="image">
+    <input type="hidden" name="voice" id="voice">
+    <input type="hidden" name="voices" id="voices">
+
+<audio id="audioPlayer"
+controls
+style="display:none;width:100%;margin-top:15px;">
+</audio>
+</form>
+
+</div>
+
+<div class="card">
+
+<h2>Camera Preview</h2>
+
+<video id="video" autoplay playsinline></video>
+
+<canvas id="canvas"></canvas>
+
+<button type="button" onclick="captureImage()">
+
+📸 Capture Face
+
+</button>
+
+<button type="button" onclick="recordVoice()">
+
+🎤 Record Voice
+
+</button>
+
+<div class="status" id="status">
+
+Waiting...
+
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+const video = document.getElementById("video");
+const status = document.getElementById("status");
+let recognitionInterval;
+let currentlyRecognizing = false;
+
+function getMedia(constraints) {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        return navigator.mediaDevices.getUserMedia(constraints);
+    }
+
+    const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+    if (!legacyGetUserMedia) {
+        return Promise.reject(new Error("getUserMedia is not supported in this browser."));
+    }
+
+    return new Promise((resolve, reject) => {
+        legacyGetUserMedia.call(navigator, constraints, resolve, reject);
+    });
+}
+
+async function initCamera() {
+    try {
+        const stream = await getMedia({ video: true });
+        video.srcObject = stream;
+        status.innerText = "🎥 Camera ready. Looking for a known student...";
+        recognitionInterval = setInterval(tryAutoRecognize, 3500);
+    } catch (err) {
+        status.innerText = "⚠️ Camera access denied or not available.";
+        console.error("Camera init failed:", err);
+        alert("Camera not found or permission denied.");
+    }
+}
+
+function captureFrameDataURL() {
+    const canvas = document.getElementById("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+    ctx.restore();
+    return canvas.toDataURL("image/jpeg");
+}
+
+async function tryAutoRecognize() {
+    if (currentlyRecognizing) {
+        return;
+    }
+
+    const rollInput = document.getElementById("roll");
+    if (rollInput.value.trim() !== "") {
+        clearInterval(recognitionInterval);
+        return;
+    }
+
+    if (!video.srcObject) {
+        return;
+    }
+
+    currentlyRecognizing = true;
+    status.innerText = "🔎 Recognizing face...";
+
+    try {
+        const image = captureFrameDataURL();
+        const response = await fetch("/api/recognize_face", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image })
+        });
+
+        const data = await response.json();
+
+        if (data.recognized && data.student) {
+            fillStudentForm(data.student);
+            status.innerText = `✅ Recognized ${data.student.name}. Form auto-filled.`;
+
+            if (data.attendance_marked === true) {
+                status.innerText = `✅ Attendance marked for ${data.student.name}.`;
+                clearInterval(recognitionInterval);
+                return;
+            }
+
+            if (data.attendance_marked === false) {
+                status.innerText = `⚠️ ${data.attendance_message}`;
+            }
+
+            clearInterval(recognitionInterval);
+        } else if (data.recognized && data.roll_number) {
+            document.getElementById("roll").value = data.roll_number;
+            status.innerText = `✅ Face recognized as roll ${data.roll_number}. Please complete the remaining fields.`;
+            clearInterval(recognitionInterval);
+        } else {
+            status.innerText = "🔎 Face not recognized yet.";
+        }
+    } catch (err) {
+        console.error("Automatic recognition failed:", err);
+        status.innerText = "⚠️ Auto recognition error.";
+    } finally {
+        currentlyRecognizing = false;
+    }
+}
+
+function fillStudentForm(student) {
+    document.getElementById("name").value = student.name || "";
+    document.getElementById("roll").value = student.roll_number || "";
+    document.getElementById("department").value = student.department || "";
+    document.getElementById("year").value = student.year || "";
+    document.getElementById("phone").value = student.phone || "";
+    document.getElementById("email").value = student.email || "";
+}
+
+function captureImage() {
+    if (!video.srcObject) {
+        alert("Camera is not ready yet. Please allow camera access and refresh the page.");
+        return;
+    }
+
+    const image = captureFrameDataURL();
+    document.getElementById("image").value = image;
+    status.innerText = "✅ Face Captured";
+}
+
+let mediaRecorder;
+let audioChunks = [];
+
+async function recordVoice() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Microphone is not supported in this browser.");
+        return;
+    }
+    // Record 5 short samples sequentially for robustness
+    try {
+        const samples = [];
+        const audioPlayer = document.getElementById("audioPlayer");
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+            ? "audio/webm"
+            : MediaRecorder.isTypeSupported("audio/ogg")
+                ? "audio/ogg"
+                : "audio/webm";
+
+        for (let i = 0; i < 5; i++) {
+            status.innerText = `🎤 Recording sample ${i + 1} of 5...`;
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream, { mimeType });
+            const chunks = [];
+
+            await new Promise((resolve, reject) => {
+                recorder.ondataavailable = (e) => chunks.push(e.data);
+                recorder.onstop = () => resolve();
+                recorder.onerror = (e) => reject(e);
+                recorder.start();
+                setTimeout(() => {
+                    recorder.stop();
+                    stream.getTracks().forEach((t) => t.stop());
+                }, 3000);
+            });
+
+            const blob = new Blob(chunks, { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            audioPlayer.src = url;
+            audioPlayer.style.display = "block";
+
+            const dataUrl = await new Promise((resolve) => {
+                const r = new FileReader();
+                r.onloadend = () => resolve(r.result);
+                r.readAsDataURL(blob);
+            });
+
+            samples.push(dataUrl);
+            // small delay between samples
+            await new Promise((r) => setTimeout(r, 500));
+        }
+
+        // store first sample in legacy `voice` and all in `voices`
+        document.getElementById("voice").value = samples[0] || "";
+        document.getElementById("voices").value = JSON.stringify(samples);
+        status.innerText = "✅ 5 Voice Samples Recorded";
+    } catch (err) {
+        status.innerText = "⚠️ Microphone access denied or not available.";
+        console.error("Voice recording failed:", err);
+        alert("Microphone permission denied or microphone not available.");
+    }
+}
+
+document.getElementById("registerForm").addEventListener("submit", function (e) {
+    if (document.getElementById("image").value == "") {
+        e.preventDefault();
+        alert("Please capture your face first.");
+        return;
+    }
+
+    if (document.getElementById("voices").value == "") {
+        e.preventDefault();
+        alert("Please record your voice samples first.");
+        return;
+    }
+});
+
+initCamera();
+</script>
+
+</body>
+
+</html>

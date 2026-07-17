@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Attendance Calendar</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+.container{width:90%;max-width:1000px;margin:40px auto}
+.card{background:rgba(255,255,255,.04);padding:20px;border-radius:12px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px;border-bottom:1px solid rgba(255,255,255,.06)}
+.present{color:#10b981}
+.absent{color:#ef4444}
+</style>
+</head>
+<body>
+<nav>
+<div class="logo">🤖 AI Attendance</div>
+<ul>
+<li><a href="/">Home</a></li>
+<li><a href="/dashboard">Dashboard</a></li>
+<li><a href="/attendance">Attendance</a></li>
+<li><a href="/attendance_calendar">Attendance Calendar</a></li>
+</ul>
+</nav>
+<div class="container">
+<div class="card">
+<h2>Attendance Calendar</h2>
+<p>Select a date to view which students are present or absent.</p>
+<input type="date" id="datePicker" />
+<button id="loadBtn">Load</button>
+<div id="info" style="margin-top:12px"></div>
+<table id="results" style="margin-top:12px">
+<thead>
+<tr><th>Roll</th><th>Name</th><th>Department</th><th>Status</th><th>Time</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+<script>
+const datePicker = document.getElementById('datePicker');
+const loadBtn = document.getElementById('loadBtn');
+const info = document.getElementById('info');
+const tbody = document.querySelector('#results tbody');
+
+function formatTime(t){return t? t : '-'}
+
+async function loadForDate(dateStr){
+    info.textContent = 'Loading...';
+    tbody.innerHTML = '';
+    try{
+        const url = '/api/attendance_for_date' + (dateStr? ('?date='+dateStr): '');
+        const res = await fetch(url);
+        const js = await res.json();
+        if(res.status !== 200){ info.textContent = js.error || 'Unable to load'; return }
+        info.textContent = 'Attendance for ' + js.date;
+        js.data.forEach(s =>{
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${s.roll}</td><td>${s.name}</td><td>${s.department}</td><td class="${s.present? 'present':'absent'}">${s.present? 'Present':'Absent'}</td><td>${formatTime(s.time)}</td>`;
+            tbody.appendChild(tr);
+        });
+    }catch(e){
+        info.textContent = 'Error loading attendance';
+        console.error(e);
+    }
+}
+
+loadBtn.addEventListener('click', ()=>{
+    const d = datePicker.value;
+    loadForDate(d);
+});
+
+// Load today by default
+(function(){
+    const today = new Date().toISOString().slice(0,10);
+    datePicker.value = today;
+    loadForDate(today);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+
+    <style>
+
+    body{
+        background:#111827;
+        color:white;
+        font-family:Arial;
+        padding:30px;
+    }
+
+    table{
+        width:100%;
+        border-collapse:collapse;
+    }
+
+    th,td{
+        border:1px solid #444;
+        padding:12px;
+        text-align:center;
+    }
+
+    th{
+        background:#00c8ff;
+        color:black;
+    }
+
+    img{
+        width:120px;
+        border-radius:10px;
+    }
+
+    audio{
+        width:220px;
+    }
+
+    .delete-btn {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 8px;
+        background: #ef4444;
+        color: white;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .delete-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    </style>
+
+</head>
+
+<body>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+        <h1 style="margin:0;">🤖 AI Attendance Dashboard</h1>
+    </div>
+    <div style="display:flex;gap:8px;">
+        <button onclick="history.back()" style="padding:8px 14px;border-radius:8px;border:none;background:#00c8ff;color:black;font-weight:700;cursor:pointer;">Back</button>
+    </div>
+</div>
+
+<h3>Total Students : {{ total_students }}</h3>
+
+<div style="margin:18px 0;padding:12px;background:#0b1220;border-radius:10px;display:flex;gap:20px;align-items:center;">
+    <div>
+        <strong style="color:#22d3ee">Today's Attendance</strong>
+        <div id="todayCounts" style="color:#cbd5e1;margin-top:6px">Loading...</div>
+    </div>
+    <div style="flex:1">
+        <strong style="color:#22d3ee">Present Now</strong>
+        <div id="presentList" style="color:#cbd5e1;margin-top:6px">—</div>
+    </div>
+    <div>
+        <button id="refreshAttendance" style="padding:8px 12px;border-radius:8px;border:none;background:#00c8ff;color:black;">Refresh</button>
+    </div>
+</div>
+
+<table>
+
+<tr>
+    <th>Face</th>
+    <th>Name</th>
+    <th>Roll</th>
+    <th>Department</th>
+    <th>Year</th>
+    <th>Voice</th>
+    <th>Actions</th>
+</tr>
+
+{% for student in students %}
+
+<tr>
+
+<td>
+<img src="/faces/{{ student.roll_number }}/face.jpg">
+</td>
+
+<td>{{ student.name }}</td>
+
+<td>{{ student.roll_number }}</td>
+
+<td>{{ student.department }}</td>
+
+<td>{{ student.year }}</td>
+
+<td>
+<audio controls>
+    <source src="/voices/{{ student.voice_file }}" type="audio/wav">
+    Your browser does not support audio.
+</audio>
+</td>
+
+<td>
+    <button class="delete-btn" onclick="deleteStudent('{{ student.roll_number }}', this)">Delete</button>
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+<script>
+async function loadTodayAttendance(){
+    try{
+        const today = new Date().toISOString().slice(0,10);
+        const res = await fetch('/api/attendance_for_date?date='+today);
+        const js = await res.json();
+        if(res.status !== 200){ document.getElementById('todayCounts').innerText = 'Unable to load'; return }
+        const present = js.data.filter(s=>s.present);
+        const absent = js.data.length - present.length;
+        document.getElementById('todayCounts').innerText = `Present: ${present.length} — Absent: ${absent}`;
+        document.getElementById('presentList').innerText = present.slice(0,10).map(s=>s.name+' ('+s.roll+')').join(', ') || 'No one yet';
+    }catch(e){ console.error(e); document.getElementById('todayCounts').innerText = 'Error'; }
+}
+
+document.getElementById('refreshAttendance').addEventListener('click', loadTodayAttendance);
+loadTodayAttendance();
+
+async function deleteStudent(roll, button) {
+    if (!confirm(`Delete student ${roll}? This will remove the student and all related attendance records.`)) {
+        return;
+    }
+    button.disabled = true;
+    button.textContent = 'Deleting...';
+
+    try {
+        const res = await fetch('/api/delete_student', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roll_number: roll })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            alert(data.message || 'Unable to delete student.');
+            button.disabled = false;
+            button.textContent = 'Delete';
+            return;
+        }
+        location.reload();
+    } catch (err) {
+        console.error(err);
+        alert('Failed to delete student.');
+        button.disabled = false;
+        button.textContent = 'Delete';
+    }
+}
+</script>
+
+<hr style="margin:30px 0;border-color:#222">
+
+<div class="calendar-section">
+    <h2>Attendance Calendar</h2>
+    <p>Select a date to view which students were present or absent.</p>
+    <input type="date" id="datePicker" />
+    <button id="loadBtn">Load</button>
+    <div id="info" style="margin-top:12px;color:#cbd5e1"></div>
+
+    <table id="calendarResults" style="margin-top:12px">
+        <thead>
+            <tr><th>Roll</th><th>Name</th><th>Department</th><th>Status</th><th>Time</th></tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+const datePicker = document.getElementById('datePicker');
+const loadBtn = document.getElementById('loadBtn');
+const info = document.getElementById('info');
+const tbody = document.querySelector('#calendarResults tbody');
+
+function formatTime(t){return t? t : '-'}
+
+async function loadForDate(dateStr){
+    info.textContent = 'Loading...';
+    tbody.innerHTML = '';
+    try{
+        const url = '/api/attendance_for_date' + (dateStr? ('?date='+dateStr): '');
+        const res = await fetch(url);
+        const js = await res.json();
+        if(res.status !== 200){ info.textContent = js.error || 'Unable to load'; return }
+        info.textContent = 'Attendance for ' + js.date;
+        js.data.forEach(s =>{
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${s.roll}</td><td>${s.name}</td><td>${s.department}</td><td style="color:${s.present? '#10b981':'#ef4444'}">${s.present? 'Present':'Absent'}</td><td>${formatTime(s.time)}</td>`;
+            tbody.appendChild(tr);
+        });
+    }catch(e){
+        info.textContent = 'Error loading attendance';
+        console.error(e);
+    }
+}
+
+loadBtn.addEventListener('click', ()=>{
+    const d = datePicker.value;
+    loadForDate(d);
+});
+
+// Load today by default
+(function(){
+    const today = new Date().toISOString().slice(0,10);
+    datePicker.value = today;
+    loadForDate(today);
+})();
+</script>
+
+</body>
+</html>

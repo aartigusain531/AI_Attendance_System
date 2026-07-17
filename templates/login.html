@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: Arial, sans-serif; }
+        .login-container { background: rgba(15, 23, 42, 0.95); padding: 40px; border-radius: 20px; border: 2px solid #22d3ee; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); width: 100%; max-width: 400px; }
+        .login-header { text-align: center; margin-bottom: 30px; }
+        .login-header h1 { color: #22d3ee; font-size: 24px; margin-bottom: 10px; }
+        .login-header p { color: #cbd5e1; font-size: 14px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; color: #cbd5e1; font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 12px; border: 1px solid #1e293b; border-radius: 8px; background: #1e293b; color: white; font-size: 14px; transition: border-color 0.3s; }
+        input[type="text"]:focus, input[type="password"]:focus { outline: none; border-color: #22d3ee; box-shadow: 0 0 10px rgba(34, 211, 238, 0.2); }
+        button { width: 100%; padding: 12px; background: #22d3ee; color: #0f172a; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; transition: background 0.3s; margin-top: 10px; }
+        button:hover { background: #00d4ff; }
+        .alerts { margin-bottom: 20px; }
+        .alert { padding: 12px; border-radius: 8px; font-size: 14px; margin-bottom: 10px; }
+        .alert-danger { background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; }
+        .alert-success { background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; color: #86efac; }
+        .help-text { text-align: center; margin-top: 20px; color: #cbd5e1; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>🤖 AI Attendance</h1>
+            <p>Admin Login</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="alerts">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="help-text">
+            <p>Admin sign-in has been disabled by the system administrator.</p>
+            <p>If you need access, contact the system administrator.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,343 @@
+/* ===========================
+   AI Attendance System
+   Futuristic CSS
+=========================== */
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Poppins',sans-serif;
+}
+
+body{
+    background:#050816;
+    color:white;
+    overflow-x:hidden;
+}
+
+/* Background Animation */
+
+.background{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:linear-gradient(135deg,#050816,#0b1d39,#041a40);
+    background-size:400% 400%;
+    animation:gradientMove 12s ease infinite;
+    z-index:-1;
+}
+
+@keyframes gradientMove{
+
+0%{
+background-position:0% 50%;
+}
+
+50%{
+background-position:100% 50%;
+}
+
+100%{
+background-position:0% 50%;
+}
+
+}
+
+/* Navbar */
+
+nav{
+
+display:flex;
+
+justify-content:space-between;
+
+align-items:center;
+
+padding:20px 50px;
+
+background:rgba(255,255,255,.05);
+
+backdrop-filter:blur(12px);
+
+box-shadow:0 0 20px rgba(0,255,255,.1);
+
+}
+
+.logo{
+
+font-size:28px;
+
+font-weight:bold;
+
+color:#00ffff;
+
+}
+
+nav ul{
+
+display:flex;
+
+gap:30px;
+
+list-style:none;
+
+}
+
+nav ul li a{
+
+text-decoration:none;
+
+color:white;
+
+font-weight:500;
+
+transition:.3s;
+
+}
+
+nav ul li a:hover{
+
+color:#00ffff;
+
+}
+
+/* Hero Section */
+
+.hero{
+
+display:flex;
+
+justify-content:space-between;
+
+align-items:center;
+
+padding:80px;
+
+min-height:80vh;
+
+}
+
+.left{
+
+width:55%;
+
+}
+
+.left h1{
+
+font-size:60px;
+
+margin-bottom:20px;
+
+color:#00ffff;
+
+}
+
+.left p{
+
+font-size:20px;
+
+line-height:35px;
+
+color:#ddd;
+
+margin-bottom:30px;
+
+}
+
+.buttons{
+
+display:flex;
+
+gap:20px;
+
+}
+
+/* Buttons */
+
+.btn{
+
+padding:15px 30px;
+
+background:#00ffff;
+
+color:#000;
+
+border-radius:8px;
+
+font-weight:bold;
+
+text-decoration:none;
+
+transition:.3s;
+
+box-shadow:0 0 15px cyan;
+
+}
+
+.btn:hover{
+
+transform:translateY(-5px);
+
+box-shadow:0 0 30px cyan;
+
+}
+
+/* Card */
+
+.card{
+
+width:350px;
+
+padding:30px;
+
+border-radius:15px;
+
+background:rgba(255,255,255,.08);
+
+backdrop-filter:blur(15px);
+
+box-shadow:0 0 30px rgba(0,255,255,.2);
+
+}
+
+.card h2{
+
+margin-bottom:20px;
+
+color:#00ffff;
+
+}
+
+.card p{
+
+margin:15px 0;
+
+font-size:18px;
+
+}
+
+/* Features */
+
+.features{
+
+display:flex;
+
+justify-content:center;
+
+gap:40px;
+
+padding:60px;
+
+flex-wrap:wrap;
+
+}
+
+.feature{
+
+width:300px;
+
+padding:30px;
+
+border-radius:15px;
+
+background:rgba(255,255,255,.05);
+
+text-align:center;
+
+transition:.4s;
+
+backdrop-filter:blur(12px);
+
+}
+
+.feature:hover{
+
+transform:translateY(-10px);
+
+box-shadow:0 0 30px cyan;
+
+}
+
+.feature h2{
+
+margin-bottom:15px;
+
+color:#00ffff;
+
+}
+
+/* Footer */
+
+footer{
+
+text-align:center;
+
+padding:30px;
+
+background:rgba(255,255,255,.05);
+
+margin-top:50px;
+
+}
+
+/* Responsive */
+
+@media(max-width:1000px){
+
+.hero{
+
+flex-direction:column;
+
+text-align:center;
+
+padding:40px;
+
+}
+
+.left{
+
+width:100%;
+
+}
+
+.right{
+
+margin-top:50px;
+
+}
+
+.buttons{
+
+justify-content:center;
+
+flex-wrap:wrap;
+
+}
+
+nav{
+
+flex-direction:column;
+
+gap:20px;
+
+}
+
+nav ul{
+
+flex-wrap:wrap;
+
+justify-content:center;
+
+}
+
+.left h1{
+
+font-size:40px;
+
+}
+
+}

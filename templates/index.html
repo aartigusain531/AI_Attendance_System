@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>AI Attendance System</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="background"></div>
+
+<nav>
+
+    <div class="logo">
+
+        🤖 AI Attendance
+
+    </div>
+
+    <ul>
+
+        <li><a href="/">Home</a></li>
+
+        <li><a href="/register">Register</a></li>
+
+        <li><a href="/attendance">Attendance</a></li>
+
+        <li><a href="/dashboard">Dashboard</a></li>
+
+    </ul>
+
+</nav>
+
+<section class="hero">
+
+    <div class="left">
+
+        <h1>
+
+            Smart AI Attendance System
+
+        </h1>
+
+        <p>
+
+            Secure Attendance using Face Recognition and Voice Recognition.
+
+        </p>
+
+        <div class="buttons">
+
+            <a href="/register" class="btn">
+
+                Register Student
+
+            </a>
+
+            <a href="/attendance" class="btn">
+
+                Start Attendance
+
+            </a>
+
+            <form action="/reset" method="POST" onsubmit="return confirm('Clear all saved faces, voices and student records? This cannot be undone.');" style="display:inline-block; margin-left:10px;">
+                <button type="submit" class="btn" style="background:#ef4444;color:#ffffff; border:none;">
+                    Reset All Data
+                </button>
+            </form>
+
+        </div>
+
+    </div>
+
+    <div class="right">
+
+        <div class="card">
+
+            <h2>System Status</h2>
+
+            <p>🟢 Camera Ready</p>
+
+            <p>🟢 Microphone Ready</p>
+
+            <p>🟢 Database Connected</p>
+
+            <p>🟢 AI Engine Ready</p>
+
+        </div>
+
+    </div>
+
+</section>
+
+<section class="features">
+
+    <div class="feature">
+
+        <h2>📷 Face Recognition</h2>
+
+        <p>
+
+            Detects and verifies the student using AI.
+
+        </p>
+
+    </div>
+
+    <div class="feature">
+
+        <h2>🎤 Voice Recognition</h2>
+
+        <p>
+
+            Confirms the student's identity by voice.
+
+        </p>
+
+    </div>
+
+    <div class="feature">
+
+        <h2>📊 Attendance Reports</h2>
+
+        <p>
+
+            View daily, monthly and yearly attendance.
+
+        </p>
+
+    </div>
+
+</section>
+
+<footer>
+
+    <p>
+
+        AI Attendance System © 2026
+
+    </p>
+
+</footer>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+</body>
+</html>
