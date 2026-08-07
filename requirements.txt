@@ -1,0 +1,8 @@
+Flask
+Flask-SQLAlchemy
+opencv-python
+face_recognition
+numpy
+scipy
+pillow
+sounddevice

@@ -61,12 +61,24 @@ MODEL_TYPE = "hog"      # Use "cnn" if you have a GPU
 SAMPLE_RATE = 16000
 CHANNELS = 1
 VOICE_DURATION = 5
-VOICE_MATCH_THRESHOLD = 0.7
+VOICE_MATCH_THRESHOLD = 0.6
 
 # ==============================
 # Attendance Settings
 # ==============================
 ALLOW_ONE_ATTENDANCE_PER_DAY = True
+
+# ==============================
+# OTP Settings
+# ==============================
+OTP_API_KEY = os.getenv("OTP_API_KEY", "otp-api-key-2026")
+OTP_TTL_MINUTES = int(os.getenv("OTP_TTL_MINUTES", "10"))
+OTP_EMAIL_FROM = os.getenv("OTP_EMAIL_FROM", "noreply@localhost")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "True").lower() == "true"
 
 # ==============================
 # Create Missing Folders

@@ -1,8 +1,11 @@
-
 import base64
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, session
-from datetime import datetime
+from datetime import datetime, timedelta
+from functools import wraps
 import io
+import random
+import smtplib
+from email.message import EmailMessage
 import os
 import shutil
 import subprocess
@@ -36,6 +39,14 @@ from models.attendance import AttendanceManager
 # ==========================================
 app = Flask(__name__)
 
+# Allow larger uploads (e.g. voice samples). Default: 16 MiB.
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    return jsonify({"success": False, "message": "Request entity too large. Reduce upload size or increase MAX_CONTENT_LENGTH."}), 413
+
 # ==========================================
 # Configuration
 # ==========================================
@@ -45,6 +56,9 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = config.SQLALCHEMY_TRACK_MODIFICAT
 
 # Initialize Database
 init_database(app)
+
+otp_store = {}
+
 
 def reload_known_faces():
     global known_face_encodings, known_face_names
@@ -121,6 +135,131 @@ def resample_audio(audio, orig_sr, target_sr):
     )
 
 
+def hz_to_mel(freq):
+    return 2595.0 * np.log10(1.0 + freq / 700.0)
+
+
+def mel_to_hz(mel):
+    return 700.0 * (10.0**(mel / 2595.0) - 1.0)
+
+
+def mel_filterbank(n_fft_bins, n_mels, sample_rate, fmin=0.0, fmax=None):
+    if fmax is None:
+        fmax = sample_rate / 2.0
+
+    mel_points = np.linspace(hz_to_mel(fmin), hz_to_mel(fmax), n_mels + 2)
+    hz_points = mel_to_hz(mel_points)
+    bin_points = np.floor((n_fft_bins - 1) * hz_points / sample_rate).astype(int)
+
+    filter_bank = np.zeros((n_mels, n_fft_bins), dtype=np.float32)
+    for m in range(1, n_mels + 1):
+        left = bin_points[m - 1]
+        center = bin_points[m]
+        right = bin_points[m + 1]
+
+        if left == center or center == right:
+            continue
+
+        for k in range(left, center):
+            filter_bank[m - 1, k] = (k - left) / (center - left)
+        for k in range(center, right):
+            filter_bank[m - 1, k] = (right - k) / (right - center)
+
+    return filter_bank
+
+
+def voice_features(audio, sample_rate, length_seconds=3, n_mels=40):
+    audio = normalize_audio(audio)
+    if len(audio) == 0:
+        return None
+
+    target_samples = int(sample_rate * length_seconds)
+    if len(audio) < target_samples:
+        audio = np.pad(audio, (0, target_samples - len(audio)))
+    else:
+        audio = audio[:target_samples]
+
+    n_fft = 512
+    hop_length = int(sample_rate * 0.010)
+    win_length = int(sample_rate * 0.025)
+    if win_length <= 0:
+        win_length = 256
+    window = np.hanning(win_length)
+
+    pad_amount = n_fft - (len(audio) - win_length) % hop_length
+    if pad_amount != n_fft:
+        audio = np.pad(audio, (0, pad_amount))
+
+    num_frames = 1 + (len(audio) - win_length) // hop_length
+    frames = np.lib.stride_tricks.as_strided(
+        audio,
+        shape=(num_frames, win_length),
+        strides=(audio.strides[0] * hop_length, audio.strides[0]),
+        writeable=False
+    )
+
+    frames = frames * window
+    spectrum = np.abs(np.fft.rfft(frames, n=n_fft, axis=1))**2
+    mel_fb = mel_filterbank(spectrum.shape[1], n_mels, sample_rate)
+    mel_spec = np.dot(spectrum, mel_fb.T)
+    log_mel = np.log(mel_spec + 1e-10)
+
+    features = np.mean(log_mel, axis=0)
+    features = (features - np.mean(features)) / (np.std(features) + 1e-9)
+    return features
+
+
+def generate_otp(length=6):
+    return str(random.randint(10 ** (length - 1), (10 ** length) - 1)).zfill(length)
+
+
+def send_otp_email(email_address, otp):
+    if not config.SMTP_SERVER:
+        print(f"OTP for {email_address}: {otp}")
+        return True
+
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = "Your OTP Code"
+        msg["From"] = config.OTP_EMAIL_FROM
+        msg["To"] = email_address
+        msg.set_content(
+            f"Your OTP code is {otp}. It will expire in {config.OTP_TTL_MINUTES} minutes."
+        )
+
+        with smtplib.SMTP(config.SMTP_SERVER, config.SMTP_PORT) as server:
+            if config.SMTP_USE_TLS:
+                server.starttls()
+            if config.SMTP_USERNAME and config.SMTP_PASSWORD:
+                server.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception as exc:
+        print("OTP email failed:", exc)
+        return False
+
+
+def save_otp(email_address, otp):
+    otp_store[email_address.lower()] = {
+        "code": otp,
+        "expires_at": datetime.utcnow() + timedelta(minutes=config.OTP_TTL_MINUTES)
+    }
+
+
+def verify_otp(email_address, otp):
+    key = email_address.lower()
+    entry = otp_store.get(key)
+    if not entry:
+        return False
+    if datetime.utcnow() > entry["expires_at"]:
+        otp_store.pop(key, None)
+        return False
+    if str(otp) != str(entry["code"]):
+        return False
+    otp_store.pop(key, None)
+    return True
+
+
 def voice_features(audio, sample_rate, length_seconds=3):
     audio = normalize_audio(audio)
     if len(audio) == 0:
@@ -162,6 +301,7 @@ def match_voice(voice_bytes):
 
     best_roll = None
     best_sim = -1.0
+    checked_files = 0
 
     for filename in os.listdir(config.VOICE_DATASET):
         voice_path = os.path.join(config.VOICE_DATASET, filename)
@@ -185,12 +325,18 @@ def match_voice(voice_bytes):
 
         # Since features are normalized, dot product is cosine similarity
         sim = float(np.dot(query_spec, stored_spec))
+        checked_files += 1
         if sim > best_sim:
             best_sim = sim
             best_roll = extract_roll_from_voice_filename(filename)
 
     threshold = getattr(config, "VOICE_MATCH_THRESHOLD", 0.7)
+    # Debug: show matching summary when no acceptable match found
     if best_roll is None or best_sim < threshold:
+        try:
+            print(f"[DEBUG] match_voice: checked_files={checked_files} best_roll={best_roll} best_sim={best_sim:.4f} threshold={threshold}")
+        except Exception:
+            pass
         return None, None
 
     return best_roll, best_sim
@@ -200,22 +346,103 @@ def match_voice(voice_bytes):
 # ==========================================
 @app.route("/")
 def home():
-    return render_template("index.html")
+    if session.get("admin_logged_in"):
+        return render_template("index.html")
+    return redirect(url_for("login"))
+
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("admin_logged_in"):
+            flash("Please log in as admin to access this page.", "warning")
+            return redirect(url_for("login", next=request.path))
+        return f(*args, **kwargs)
+
+    return decorated_function
 
 # ==========================================
-# Admin Login (disabled)
+# Admin Login
+# ==========================================
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    # Admin sign-in has been disabled. Redirect to home with a notice.
-    flash("Admin sign-in has been disabled.", "warning")
-    return redirect(url_for("home"))
+    if session.get("admin_logged_in"):
+        return redirect(url_for("home"))
 
-# Logout route removed as login system has been removed.
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
+
+        admin = Admin.query.filter_by(username=username).first()
+        if admin and admin.password == password:
+            session["admin_logged_in"] = True
+            session["admin_username"] = admin.username
+            flash("Admin login successful.", "success")
+            next_url = request.args.get("next") or url_for("home")
+            return redirect(next_url)
+
+        flash("Invalid username or password.", "danger")
+
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.pop("admin_logged_in", None)
+    session.pop("admin_username", None)
+    flash("You have been logged out.", "success")
+    return redirect(url_for("login"))
+
+
+@app.route("/api/otp/send", methods=["POST"])
+def send_otp_api():
+    data = request.get_json(silent=True) or {}
+    api_key = data.get("api_key", "")
+    email_address = (data.get("email") or "").strip()
+
+    if api_key != config.OTP_API_KEY:
+        return jsonify({"success": False, "message": "Invalid OTP API key."}), 401
+
+    if not email_address:
+        return jsonify({"success": False, "message": "Email is required."}), 400
+
+    otp = generate_otp()
+    save_otp(email_address, otp)
+
+    sent = send_otp_email(email_address, otp)
+    if not sent:
+        return jsonify({"success": False, "message": "Unable to send OTP email."}), 500
+
+    return jsonify({
+        "success": True,
+        "message": "OTP sent successfully.",
+        "expires_in_minutes": config.OTP_TTL_MINUTES
+    })
+
+
+@app.route("/api/otp/verify", methods=["POST"])
+def verify_otp_api():
+    data = request.get_json(silent=True) or {}
+    api_key = data.get("api_key", "")
+    email_address = (data.get("email") or "").strip()
+    otp = (data.get("otp") or "").strip()
+
+    if api_key != config.OTP_API_KEY:
+        return jsonify({"success": False, "message": "Invalid OTP API key."}), 401
+
+    if not email_address or not otp:
+        return jsonify({"success": False, "message": "Email and OTP are required."}), 400
+
+    if verify_otp(email_address, otp):
+        return jsonify({"success": True, "message": "OTP verified successfully."})
+
+    return jsonify({"success": False, "message": "Invalid or expired OTP."}), 400
 
 # ==========================================
 # Dashboard
 # ==========================================
 @app.route("/dashboard")
+@admin_required
 def dashboard():
     # Dashboard accessible without login (login system removed)
     total_students = Student.query.count()
@@ -245,6 +472,7 @@ def dashboard():
 # Register Student (Admin Only)
 # ==========================================
 @app.route("/register", methods=["GET", "POST"])
+@admin_required
 def register():
     # NOTE: Admin authentication removed for registration to allow student
     # registration without signing in. If you want to restrict this, re-add
