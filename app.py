@@ -16,6 +16,11 @@ import face_recognition
 from scipy.io import wavfile
 import json
 
+try:
+    import imageio_ffmpeg
+except ImportError:
+    imageio_ffmpeg = None
+
 # Import Config
 import config
 
@@ -39,8 +44,8 @@ from models.attendance import AttendanceManager
 # ==========================================
 app = Flask(__name__)
 
-# Allow larger uploads (e.g. voice samples). Default: 16 MiB.
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+# Registration submits several base64 voice samples in one form.
+app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
 
 
 @app.errorhandler(413)
@@ -67,9 +72,14 @@ def reload_known_faces():
 
 def ffmpeg_decode_audio(raw_bytes, target_sr=16000):
     try:
+        ffmpeg_executable = (
+            imageio_ffmpeg.get_ffmpeg_exe()
+            if imageio_ffmpeg
+            else "ffmpeg"
+        )
         result = subprocess.run(
             [
-                "ffmpeg",
+                ffmpeg_executable,
                 "-hide_banner",
                 "-loglevel",
                 "error",
@@ -90,7 +100,8 @@ def ffmpeg_decode_audio(raw_bytes, target_sr=16000):
         )
         with io.BytesIO(result.stdout) as stream:
             return wavfile.read(stream)
-    except Exception:
+    except Exception as error:
+        print(f"Audio decode failed. Install ffmpeg or imageio-ffmpeg: {error}")
         return None, None
 
 
@@ -344,9 +355,17 @@ def match_voice(voice_bytes):
 # ==========================================
 # Home Page
 # ==========================================
+TEACHER_GRADES = [
+    "LKG", "UKG", "1st", "2nd", "3rd", "4th", "5th", "6th",
+    "7th", "8th", "9th", "10th", "11th", "12th"
+]
+
+
 @app.route("/")
 def home():
     if session.get("admin_logged_in"):
+        if not session.get("teacher_grade"):
+            return redirect(url_for("teacher_grade"))
         return render_template("index.html")
     return redirect(url_for("login"))
 
@@ -357,6 +376,8 @@ def admin_required(f):
         if not session.get("admin_logged_in"):
             flash("Please log in as admin to access this page.", "warning")
             return redirect(url_for("login", next=request.path))
+        if not session.get("teacher_grade") and request.endpoint != "teacher_grade":
+            return redirect(url_for("teacher_grade", next=request.path))
         return f(*args, **kwargs)
 
     return decorated_function
@@ -367,6 +388,8 @@ def admin_required(f):
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("admin_logged_in"):
+        if not session.get("teacher_grade"):
+            return redirect(url_for("teacher_grade"))
         return redirect(url_for("home"))
 
     if request.method == "POST":
@@ -377,19 +400,37 @@ def login():
         if admin and admin.password == password:
             session["admin_logged_in"] = True
             session["admin_username"] = admin.username
+            session.pop("teacher_grade", None)
             flash("Admin login successful.", "success")
-            next_url = request.args.get("next") or url_for("home")
-            return redirect(next_url)
+            return redirect(url_for("teacher_grade", next=request.args.get("next")))
 
         flash("Invalid username or password.", "danger")
 
     return render_template("login.html")
 
 
+@app.route("/teacher-grade", methods=["GET", "POST"])
+@admin_required
+def teacher_grade():
+    next_url = request.args.get("next") or request.form.get("next")
+
+    if request.method == "POST":
+        selected_grade = request.form.get("grade", "").strip()
+        if selected_grade not in TEACHER_GRADES:
+            flash("Please select a valid grade.", "danger")
+            return render_template("teacher_grade.html", grades=TEACHER_GRADES, next_url=next_url)
+
+        session["teacher_grade"] = selected_grade
+        return redirect(next_url or url_for("home"))
+
+    return render_template("teacher_grade.html", grades=TEACHER_GRADES, next_url=next_url)
+
+
 @app.route("/logout")
 def logout():
     session.pop("admin_logged_in", None)
     session.pop("admin_username", None)
+    session.pop("teacher_grade", None)
     flash("You have been logged out.", "success")
     return redirect(url_for("login"))
 
@@ -444,20 +485,26 @@ def verify_otp_api():
 @app.route("/dashboard")
 @admin_required
 def dashboard():
-    # Dashboard accessible without login (login system removed)
-    total_students = Student.query.count()
+    teacher_grade = session["teacher_grade"]
+    students = Student.query.filter_by(year=teacher_grade).all()
+    student_ids = [student.id for student in students]
 
-    total_attendance = Attendance.query.count()
+    total_students = len(students)
+
+    total_attendance = Attendance.query.filter(
+        Attendance.student_id.in_(student_ids)
+    ).count() if student_ids else 0
 
     today = datetime.today().date()
 
-    today_attendance = Attendance.query.filter_by(date=today).count()
+    today_attendance = Attendance.query.filter(
+        Attendance.date == today,
+        Attendance.student_id.in_(student_ids)
+    ).count() if student_ids else 0
 
-    students = Student.query.all()
-
-    attendance = Attendance.query.order_by(
-        Attendance.created_at.desc()
-    ).all()
+    attendance = Attendance.query.filter(
+        Attendance.student_id.in_(student_ids)
+    ).order_by(Attendance.created_at.desc()).all() if student_ids else []
 
     return render_template(
         "dashboard.html",
@@ -465,7 +512,8 @@ def dashboard():
         total_attendance=total_attendance,
         today_attendance=today_attendance,
         students=students,
-        attendance=attendance
+        attendance=attendance,
+        teacher_grade=teacher_grade
     )
 
 # ==========================================
@@ -483,7 +531,7 @@ def register():
         name = request.form.get("name")
         roll = request.form.get("roll")
         department = request.form.get("department")
-        year = request.form.get("year")
+        year = session["teacher_grade"]
         phone = request.form.get("phone")
         email = request.form.get("email")
 
@@ -661,6 +709,13 @@ def recognize_face():
     data = request.get_json() or {}
     image_data = data.get("image")
 
+    teacher_grade = session.get("teacher_grade")
+    if not teacher_grade:
+        return jsonify({
+            "recognized": False,
+            "message": "Select a grade before starting face recognition."
+        }), 403
+
     if not image_data:
         return jsonify({"recognized": False, "message": "No image data provided."}), 400
 
@@ -681,18 +736,31 @@ def recognize_face():
             return jsonify({"recognized": False, "message": "No face detected."})
 
         face_encoding = face_encodings[0]
-        distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+        candidate_indices = [
+            index for index, roll_number in enumerate(known_face_names)
+            if (student := Student.query.filter_by(roll_number=roll_number).first())
+            and student.year == teacher_grade
+        ]
+
+        if not candidate_indices:
+            return jsonify({
+                "recognized": False,
+                "message": "No registered faces found for the selected grade."
+            })
+
+        candidate_encodings = [known_face_encodings[index] for index in candidate_indices]
+        distances = face_recognition.face_distance(candidate_encodings, face_encoding)
 
         if len(distances) == 0:
             return jsonify({"recognized": False, "message": "No known faces available."})
 
-        best_idx = int(np.argmin(distances))
-        best_distance = float(distances[best_idx])
+        best_candidate_idx = int(np.argmin(distances))
+        best_distance = float(distances[best_candidate_idx])
 
         if best_distance > config.FACE_TOLERANCE:
             return jsonify({"recognized": False, "message": "Face not recognized."})
 
-        roll_number = known_face_names[best_idx]
+        roll_number = known_face_names[candidate_indices[best_candidate_idx]]
         student = Student.query.filter_by(roll_number=roll_number).first()
 
         if student:
@@ -716,6 +784,7 @@ def recognize_face():
 # Attendance Page
 # ==========================================
 @app.route("/attendance")
+@admin_required
 def attendance_page():
     return render_template("attendance.html")
 
@@ -764,7 +833,11 @@ def attendance_for_date():
     else:
         target_date = datetime.utcnow().date()
 
-    students = Student.query.order_by(Student.roll_number).all()
+    teacher_grade = session.get("teacher_grade")
+    students_query = Student.query.order_by(Student.roll_number)
+    if teacher_grade:
+        students_query = students_query.filter_by(year=teacher_grade)
+    students = students_query.all()
     results = []
     for s in students:
         att = Attendance.query.filter_by(student_id=s.id, date=target_date).first()
@@ -931,6 +1004,15 @@ def mark_attendance_api():
 
     if not voice_data:
         return jsonify({"success": False, "message": "Voice sample is required for verification."}), 400
+
+    teacher_grade = session.get("teacher_grade")
+    if roll_number and teacher_grade:
+        student = Student.query.filter_by(roll_number=roll_number).first()
+        if not student or student.year != teacher_grade:
+            return jsonify({
+                "success": False,
+                "message": "Student does not belong to the selected grade."
+            }), 403
 
     try:
         header, encoded = voice_data.split(",", 1)
