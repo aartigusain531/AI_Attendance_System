@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Grade | AI Attendance</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(135deg, #0f172a, #164e63); color: #e2e8f0; font-family: Arial, sans-serif; }
+        .grade-container { width: 100%; max-width: 520px; padding: 36px; background: rgba(15, 23, 42, 0.96); border: 2px solid #22d3ee; border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45); }
+        h1 { margin: 0 0 10px; color: #22d3ee; font-size: 26px; text-align: center; }
+        p { margin: 0 0 26px; color: #cbd5e1; text-align: center; }
+        .alerts { margin-bottom: 18px; }
+        .alert { padding: 12px; border: 1px solid #ef4444; border-radius: 8px; color: #fca5a5; background: rgba(239, 68, 68, 0.15); }
+        .grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        label { display: flex; align-items: center; justify-content: center; min-height: 48px; border: 1px solid #334155; border-radius: 8px; color: #cbd5e1; cursor: pointer; }
+        label:has(input:checked) { border-color: #22d3ee; background: rgba(34, 211, 238, 0.15); color: #67e8f9; }
+        input { position: absolute; opacity: 0; }
+        button { width: 100%; margin-top: 24px; padding: 13px; border: 0; border-radius: 8px; background: #22d3ee; color: #0f172a; font-size: 16px; font-weight: 700; cursor: pointer; }
+        @media (max-width: 420px) { .grade-container { padding: 26px 20px; } .grades { grid-template-columns: repeat(3, 1fr); } }
+    </style>
+</head>
+<body>
+    <main class="grade-container">
+        <h1>Choose Your Grade</h1>
+        <p>Select the grade you teach before entering the attendance system.</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="alerts">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="post">
+            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+            <div class="grades">
+                {% for grade in grades %}
+                    <label>
+                        <input type="radio" name="grade" value="{{ grade }}" required>
+                        {{ grade }}
+                    </label>
+                {% endfor %}
+            </div>
+            <button type="submit">Enter Attendance System</button>
+        </form>
+    </main>
+</body>
+</html>

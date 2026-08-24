@@ -6,3 +6,4 @@ numpy
 scipy
 pillow
 sounddevice
+imageio-ffmpeg

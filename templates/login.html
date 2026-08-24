@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login</title>
+    <title>Teacher Login</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: Arial, sans-serif; }
@@ -28,7 +28,7 @@
     <div class="login-container">
         <div class="login-header">
             <h1>🤖 AI Attendance</h1>
-            <p>Admin Login</p>
+            <p>Teacher Login</p>
         </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -54,8 +54,8 @@
         </form>
 
         <div class="help-text">
-            <p>Use your admin username and password.</p>
-            <p>If you do not have an admin account, create one first.</p>
+            <p>Use your teacher username and password.</p>
+            <p>Select your grade after signing in.</p>
         </div>
     </div>
 </body>

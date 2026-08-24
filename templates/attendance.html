@@ -108,17 +108,6 @@
             <button id="useVoiceButton" type="button" style="display:none;margin-left:10px;" onclick="useVoiceOnly()">Use Voice Only</button>
             <button id="backButton" type="button" style="display:none;margin-left:10px;" onclick="resetToCamera()">Back</button>
             <button id="overrideButton" type="button" style="display:none;margin-left:10px;background:#ffb86b;color:black;" onclick="markPresentAnyway()">Mark Present Anyway</button>
-            <div id="deviceSelectors" style="display:none; margin-top:16px; gap:10px; display:flex; flex-wrap:wrap;">
-                <label style="color:#cbd5e1; font-size:14px; display:flex; align-items:center; gap:8px;">
-                    Camera:
-                    <select id="videoDeviceSelect" style="border-radius:8px; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #1e293b;"></select>
-                </label>
-                <label style="color:#cbd5e1; font-size:14px; display:flex; align-items:center; gap:8px;">
-                    Microphone:
-                    <select id="micDeviceSelect" style="border-radius:8px; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #1e293b;"></select>
-                </label>
-                <button id="selectDevicesButton" type="button" onclick="switchDevices()" style="background:#7c3aed;color:white;border:none;border-radius:10px;padding:14px 20px;">Use Selected Devices</button>
-            </div>
             <audio id="audioPlayer" controls></audio>
         </div>
     </div>
@@ -177,8 +166,6 @@
                 }
 
                 console.warn("Microphone request failed, trying fallback constraints:", error);
-                await listMediaDevices();
-
                 await new Promise(resolve => setTimeout(resolve, 1000));
 
                 try {
@@ -226,105 +213,6 @@
             return error.message || "Microphone access failed.";
         }
 
-        async function listMediaDevices() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-                console.warn("Media device enumeration is not supported in this browser.");
-                return;
-            }
-
-            try {
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoInputs = devices.filter((device) => device.kind === "videoinput");
-                const audioInputs = devices.filter((device) => device.kind === "audioinput");
-
-                console.log("Available video input devices:", videoInputs);
-                console.log("Available audio input devices:", audioInputs);
-
-                const videoSelect = document.getElementById("videoDeviceSelect");
-                const micSelect = document.getElementById("micDeviceSelect");
-                const deviceSelectors = document.getElementById("deviceSelectors");
-
-                if (videoSelect && micSelect && deviceSelectors) {
-                    videoSelect.innerHTML = "";
-                    micSelect.innerHTML = "";
-
-                    videoInputs.forEach(device => {
-                        const option = document.createElement("option");
-                        option.value = device.deviceId;
-                        option.text = device.label || `Camera ${videoSelect.length + 1}`;
-                        videoSelect.appendChild(option);
-                    });
-
-                    audioInputs.forEach(device => {
-                        const option = document.createElement("option");
-                        option.value = device.deviceId;
-                        option.text = device.label || `Microphone ${micSelect.length + 1}`;
-                        micSelect.appendChild(option);
-                    });
-
-                    if (videoInputs.length > 0 || audioInputs.length > 0) {
-                        deviceSelectors.style.display = "flex";
-                    }
-
-                    if (videoInputs.length > 0) {
-                        const preferredVideo = selectPreferredDevice(videoInputs);
-                        if (preferredVideo) videoSelect.value = preferredVideo.deviceId;
-                    }
-                    if (audioInputs.length > 0) {
-                        const preferredAudio = selectPreferredDevice(audioInputs);
-                        if (preferredAudio) micSelect.value = preferredAudio.deviceId;
-                    }
-                }
-
-                if (audioInputs.length === 0) {
-                    statusEl.textContent = "⚠️ No microphone input devices were found. Please connect a microphone and refresh the page.";
-                }
-            } catch (err) {
-                console.warn("Unable to enumerate media devices:", err);
-            }
-        }
-
-        function selectPreferredDevice(devices) {
-            const externalDevice = devices.find(device => {
-                const label = (device.label || "").toLowerCase();
-                return /usb|external|webcam|logitech|c920|pro|hd|studio|mic|camera/.test(label) && !/built-in|integrated/.test(label);
-            });
-            return externalDevice || devices[0];
-        }
-
-        function getSelectedDeviceConstraints(options = { video: false, audio: false }) {
-            const constraints = {};
-            const videoSelect = document.getElementById("videoDeviceSelect");
-            const micSelect = document.getElementById("micDeviceSelect");
-
-            if (options.video) {
-                if (videoSelect && videoSelect.value) {
-                    constraints.video = { deviceId: { exact: videoSelect.value } };
-                } else {
-                    constraints.video = true;
-                }
-            }
-
-            if (options.audio) {
-                if (micSelect && micSelect.value) {
-                    constraints.audio = { deviceId: { exact: micSelect.value } };
-                } else {
-                    constraints.audio = true;
-                }
-            }
-
-            return constraints;
-        }
-
-        async function switchDevices() {
-            stopCamera();
-            if (recognitionInterval) {
-                clearInterval(recognitionInterval);
-                recognitionInterval = null;
-            }
-            await initCamera();
-        }
-
         function getPreferredMimeType() {
             if (!window.MediaRecorder) {
                 return "";
@@ -335,19 +223,17 @@
 
         async function initCamera() {
             try {
-                const stream = await getMedia(getSelectedDeviceConstraints({ video: true }));
+                const stream = await getMedia({ video: true });
                 video.srcObject = stream;
                 statusEl.textContent = "🎥 Camera ready. Looking for a registered student...";
                 startRecognition();
                 // hide voice-only option when camera works
                 if (useVoiceButton) useVoiceButton.style.display = "none";
-                listMediaDevices();
             } catch (err) {
                 statusEl.textContent = "⚠️ Camera access denied or unavailable.";
                 retryButton.style.display = "inline-block";
                 if (useVoiceButton) useVoiceButton.style.display = "inline-block";
                 console.error(err);
-                listMediaDevices();
             }
         }
 
@@ -440,7 +326,7 @@
                         autoGainControl: true,
                         channelCount: 1
                     }
-                }, getSelectedDeviceConstraints({ audio: true })));
+                }, { audio: true }));
                 activeAudioStream = stream;
                 const mimeType = getPreferredMimeType();
                 const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
@@ -500,7 +386,7 @@
                         autoGainControl: true,
                         channelCount: 1
                     }
-                }, getSelectedDeviceConstraints({ audio: true })));
+                }, { audio: true }));
                 activeAudioStream = stream;
                 const mimeType = getPreferredMimeType();
                 const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);

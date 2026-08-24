@@ -143,7 +143,8 @@ required>
 id="year"
 type="text"
 name="year"
-placeholder="Year"
+value="{{ session.get('teacher_grade') }}"
+readonly
 required>
 
 <input
@@ -194,18 +195,6 @@ style="display:none;width:100%;margin-top:15px;">
 🎤 Record Voice
 
 </button>
-
-<div id="deviceSelectors" style="display:none; margin-top:16px; gap:10px; display:flex; flex-wrap:wrap;">
-    <label style="color:#e2e8f0; font-size:14px; display:flex; align-items:center; gap:8px;">
-        Camera:
-        <select id="videoDeviceSelect" style="border-radius:8px; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #1e293b;"></select>
-    </label>
-    <label style="color:#e2e8f0; font-size:14px; display:flex; align-items:center; gap:8px;">
-        Microphone:
-        <select id="micDeviceSelect" style="border-radius:8px; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #1e293b;"></select>
-    </label>
-    <button type="button" onclick="switchDeviceSelection()" style="background:#7c3aed;color:white;border:none;border-radius:10px;padding:14px 20px;">Use Selected Devices</button>
-</div>
 
 <div class="status" id="status">
 
@@ -258,29 +247,30 @@ async function requestMicrophone(constraints, retries = 1) {
 
 async function initCamera() {
     try {
-        const stream = await getMedia(getSelectedDeviceConstraints({ video: true }));
+        const stream = await getMedia({ video: true });
         video.srcObject = stream;
         status.innerText = "🎥 Camera ready. Looking for a known student...";
         recognitionInterval = setInterval(tryAutoRecognize, 3500);
-        listMediaDevices();
     } catch (err) {
         status.innerText = "⚠️ Camera access denied or not available.";
         console.error("Camera init failed:", err);
         alert("Camera not found or permission denied.");
-        listMediaDevices();
     }
 }
 
 function captureFrameDataURL() {
     const canvas = document.getElementById("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const sourceWidth = video.videoWidth || 640;
+    const sourceHeight = video.videoHeight || 480;
+    const scale = Math.min(1, 640 / sourceWidth, 480 / sourceHeight);
+    canvas.width = Math.round(sourceWidth * scale);
+    canvas.height = Math.round(sourceHeight * scale);
     const ctx = canvas.getContext("2d");
     ctx.save();
     ctx.scale(-1, 1);
     ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
     ctx.restore();
-    return canvas.toDataURL("image/jpeg");
+    return canvas.toDataURL("image/jpeg", 0.7);
 }
 
 async function tryAutoRecognize() {
@@ -397,100 +387,6 @@ function getMicErrorMessage(error) {
     return error.message || "Microphone access failed.";
 }
 
-async function listMediaDevices() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-        console.warn("Media device enumeration is not supported in this browser.");
-        return;
-    }
-
-    try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = devices.filter(device => device.kind === "videoinput");
-        const audioInputs = devices.filter(device => device.kind === "audioinput");
-
-        console.log("Available video input devices:", videoInputs);
-        console.log("Available audio input devices:", audioInputs);
-
-        const videoSelect = document.getElementById("videoDeviceSelect");
-        const micSelect = document.getElementById("micDeviceSelect");
-        const selectors = document.getElementById("deviceSelectors");
-
-        if (videoSelect && micSelect && selectors) {
-            videoSelect.innerHTML = "";
-            micSelect.innerHTML = "";
-
-            videoInputs.forEach(device => {
-                const option = document.createElement("option");
-                option.value = device.deviceId;
-                option.text = device.label || `Camera ${videoSelect.length + 1}`;
-                videoSelect.appendChild(option);
-            });
-
-            audioInputs.forEach(device => {
-                const option = document.createElement("option");
-                option.value = device.deviceId;
-                option.text = device.label || `Microphone ${micSelect.length + 1}`;
-                micSelect.appendChild(option);
-            });
-
-            if (videoInputs.length > 0 || audioInputs.length > 0) {
-                selectors.style.display = "flex";
-            }
-
-            if (videoSelect.options.length > 0) {
-                const preferredVideo = selectPreferredDevice(videoInputs);
-                if (preferredVideo) videoSelect.value = preferredVideo.deviceId;
-            }
-            if (micSelect.options.length > 0) {
-                const preferredMic = selectPreferredDevice(audioInputs);
-                if (preferredMic) micSelect.value = preferredMic.deviceId;
-            }
-        }
-    } catch (err) {
-        console.warn("Unable to enumerate media devices:", err);
-    }
-}
-
-function selectPreferredDevice(devices) {
-    return devices.find(device => {
-        const label = (device.label || "").toLowerCase();
-        return /usb|external|webcam|logitech|c920|pro|hd|studio|mic|camera/.test(label) && !/built-in|integrated/.test(label);
-    }) || devices[0];
-}
-
-function getSelectedDeviceConstraints(options = { video: false, audio: false }) {
-    const constraints = {};
-    const videoSelect = document.getElementById("videoDeviceSelect");
-    const micSelect = document.getElementById("micDeviceSelect");
-
-    if (options.video) {
-        if (videoSelect && videoSelect.value) {
-            constraints.video = { deviceId: { exact: videoSelect.value } };
-        } else {
-            constraints.video = true;
-        }
-    }
-
-    if (options.audio) {
-        if (micSelect && micSelect.value) {
-            constraints.audio = { deviceId: { exact: micSelect.value } };
-        } else {
-            constraints.audio = true;
-        }
-    }
-
-    return constraints;
-}
-
-function switchDeviceSelection() {
-    stopActiveAudioStream();
-    if (recognitionInterval) {
-        clearInterval(recognitionInterval);
-        recognitionInterval = null;
-    }
-    initCamera();
-}
-
 function getPreferredMimeType() {
     if (!window.MediaRecorder) {
         return "";
@@ -508,14 +404,14 @@ async function recordVoice() {
         alert("Microphone access requires HTTPS or localhost.");
         return;
     }
-    // Record 5 short samples sequentially for robustness
+    // Record 3 short samples while keeping the registration request bounded.
     try {
         const samples = [];
         const audioPlayer = document.getElementById("audioPlayer");
         const mimeType = getPreferredMimeType();
 
-        for (let i = 0; i < 5; i++) {
-            status.innerText = `🎤 Recording sample ${i + 1} of 5...`;
+        for (let i = 0; i < 3; i++) {
+            status.innerText = `🎤 Recording sample ${i + 1} of 3...`;
             stopActiveAudioStream();
             const stream = await requestMicrophone(Object.assign({
                 audio: {
@@ -524,7 +420,7 @@ async function recordVoice() {
                     autoGainControl: true,
                     channelCount: 1
                 }
-            }, getSelectedDeviceConstraints({ audio: true })));
+            }, { audio: true }));
             activeAudioStream = stream;
             const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
             const chunks = [];
@@ -558,10 +454,10 @@ async function recordVoice() {
             await new Promise((r) => setTimeout(r, 500));
         }
 
-        // store first sample in legacy `voice` and all in `voices`
-        document.getElementById("voice").value = samples[0] || "";
+        // Store all samples together; the backend saves each one separately.
+        document.getElementById("voice").value = "";
         document.getElementById("voices").value = JSON.stringify(samples);
-        status.innerText = "✅ 5 Voice Samples Recorded";
+        status.innerText = "✅ 3 Voice Samples Recorded";
     } catch (err) {
         stopActiveAudioStream();
         const message = getMicErrorMessage(err);

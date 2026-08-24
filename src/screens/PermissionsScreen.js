@@ -28,11 +28,24 @@ export default function PermissionsScreen() {
   }, []);
 
   async function requestAllPermissions() {
-    const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
-    const { status: micStatus } = await Camera.requestMicrophonePermissionsAsync();
-    setHasCameraPermission(cameraStatus === 'granted');
-    setHasMicrophonePermission(micStatus === 'granted');
-    setPermissionChecked(true);
+    try {
+      const cameraPermission = await Camera.requestCameraPermissionsAsync();
+      const micPermission = await Camera.requestMicrophonePermissionsAsync();
+
+      const cameraGranted = cameraPermission.status === 'granted';
+      const micGranted = micPermission.status === 'granted';
+
+      setHasCameraPermission(cameraGranted);
+      setHasMicrophonePermission(micGranted);
+      setPermissionChecked(true);
+
+      if (!cameraGranted || !micGranted) {
+        alert('Camera and microphone access are required for attendance verification.');
+      }
+    } catch (error) {
+      console.error('Permission request failed:', error);
+      setPermissionChecked(true);
+    }
   }
 
   function toggleCameraType() {
