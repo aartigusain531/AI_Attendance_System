@@ -9,6 +9,7 @@
 <title>Register Student</title>
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="{{ url_for('static', filename='js/media-permissions.js') }}"></script>
 
 <style>
 
@@ -182,6 +183,12 @@ style="display:none;width:100%;margin-top:15px;">
 
 <video id="video" autoplay playsinline></video>
 
+<button id="enableDevicesButton" type="button" onclick="enableDevices()">
+
+Enable Camera & Microphone
+
+</button>
+
 <canvas id="canvas"></canvas>
 
 <button type="button" onclick="captureImage()">
@@ -190,7 +197,7 @@ style="display:none;width:100%;margin-top:15px;">
 
 </button>
 
-<button type="button" onclick="recordVoice()">
+<button id="recordVoiceButton" type="button" onclick="recordVoice()">
 
 🎤 Record Voice
 
@@ -214,18 +221,24 @@ let recognitionInterval;
 let currentlyRecognizing = false;
 
 function getMedia(constraints) {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        return navigator.mediaDevices.getUserMedia(constraints);
-    }
+    return AttendanceMedia.request(constraints);
+}
 
-    const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-    if (!legacyGetUserMedia) {
-        return Promise.reject(new Error("getUserMedia is not supported in this browser."));
+async function enableDevices() {
+    const button = document.getElementById("enableDevicesButton");
+    button.disabled = true;
+    status.innerText = "Allow camera and microphone in the Chrome prompt...";
+    try {
+        const stream = await AttendanceMedia.requestBoth();
+        stream.getAudioTracks().forEach(track => track.stop());
+        video.srcObject = stream;
+        button.style.display = "none";
+        status.innerText = "✅ Camera and microphone ready.";
+    } catch (error) {
+        button.disabled = false;
+        status.innerText = `⚠️ ${AttendanceMedia.describe(error, "Camera and microphone")}`;
+        console.error("Device permission request failed:", error);
     }
-
-    return new Promise((resolve, reject) => {
-        legacyGetUserMedia.call(navigator, constraints, resolve, reject);
-    });
 }
 
 async function requestMicrophone(constraints, retries = 1) {
@@ -252,7 +265,7 @@ async function initCamera() {
         status.innerText = "🎥 Camera ready. Looking for a known student...";
         recognitionInterval = setInterval(tryAutoRecognize, 3500);
     } catch (err) {
-        status.innerText = "⚠️ Camera access denied or not available.";
+        status.innerText = `⚠️ ${AttendanceMedia.describe(err, "Camera")}`;
         console.error("Camera init failed:", err);
         alert("Camera not found or permission denied.");
     }
@@ -354,6 +367,8 @@ function captureImage() {
 let mediaRecorder;
 let audioChunks = [];
 let activeAudioStream = null;
+let recordingInProgress = false;
+const recordVoiceButton = document.getElementById("recordVoiceButton");
 
 function stopActiveAudioStream() {
     if (activeAudioStream) {
@@ -396,39 +411,33 @@ function getPreferredMimeType() {
 }
 
 async function recordVoice() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("Microphone is not supported in this browser.");
-        return;
-    }
-    if (window.location.protocol !== "https:" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-        alert("Microphone access requires HTTPS or localhost.");
+    if (recordingInProgress) {
         return;
     }
     // Record 3 short samples while keeping the registration request bounded.
+    recordingInProgress = true;
+    recordVoiceButton.disabled = true;
     try {
         const samples = [];
         const audioPlayer = document.getElementById("audioPlayer");
         const mimeType = getPreferredMimeType();
+        activeAudioStream = await requestMicrophone({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                channelCount: 1
+            }
+        });
 
         for (let i = 0; i < 3; i++) {
             status.innerText = `🎤 Recording sample ${i + 1} of 3...`;
-            stopActiveAudioStream();
-            const stream = await requestMicrophone(Object.assign({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    channelCount: 1
-                }
-            }, { audio: true }));
-            activeAudioStream = stream;
-            const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+            const recorder = mimeType ? new MediaRecorder(activeAudioStream, { mimeType }) : new MediaRecorder(activeAudioStream);
             const chunks = [];
 
             await new Promise((resolve, reject) => {
                 recorder.ondataavailable = (e) => chunks.push(e.data);
                 recorder.onstop = () => {
-                    stopActiveAudioStream();
                     resolve();
                 };
                 recorder.onerror = (e) => reject(e);
@@ -459,13 +468,20 @@ async function recordVoice() {
         document.getElementById("voices").value = JSON.stringify(samples);
         status.innerText = "✅ 3 Voice Samples Recorded";
     } catch (err) {
-        stopActiveAudioStream();
         const message = getMicErrorMessage(err);
         status.innerText = `⚠️ ${message}`;
         console.error("Voice recording failed:", err);
         alert(message);
+    } finally {
+        stopActiveAudioStream();
+        recordingInProgress = false;
+        recordVoiceButton.disabled = false;
     }
 }
+
+window.addEventListener("pagehide", () => {
+    stopActiveAudioStream();
+});
 
 document.getElementById("registerForm").addEventListener("submit", function (e) {
     if (document.getElementById("image").value == "") {

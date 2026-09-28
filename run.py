@@ -10,6 +10,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import config
+
 # Ensure we're in the right directory
 os.chdir(Path(__file__).parent)
 
@@ -76,14 +78,16 @@ def show_welcome():
 
 def show_info():
     """Display application info"""
-    print("""
+    protocol = "https" if config.ENABLE_HTTPS else "http"
+    port = config.PORT
+    print(f"""
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║  Application started successfully!                         ║
 ║                                                            ║
 ║  WEB INTERFACE:                                           ║
-║    Local:   http://localhost:5000                         ║
-║    Network: http://192.168.29.117:5000                    ║
+║    Local:   {protocol}://localhost:{port}                   ║
+║    Network: {protocol}://<server-ip>:{port}                 ║
 ║                                                            ║
 ║  DEFAULT ADMIN:                                           ║
 ║    Username: admin                                         ║
@@ -125,10 +129,11 @@ def main():
         from app import app
         show_info()
         app.run(
-            debug=True,
+            debug=os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes"},
             host="0.0.0.0",
-            port=5000,
-            use_reloader=True
+            port=config.PORT,
+            use_reloader=False,
+            ssl_context="adhoc" if config.ENABLE_HTTPS else None
         )
     except KeyboardInterrupt:
         print("\n\n✓ Server stopped by user")

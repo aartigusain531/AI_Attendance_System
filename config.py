@@ -8,21 +8,38 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # ==============================
 # Database
 # ==============================
-DATABASE_NAME = "attendance.db"
+DATABASE_NAME = os.getenv("DATABASE_NAME", "attendance.db")
 DATABASE_PATH = os.path.join(BASE_DIR, DATABASE_NAME)
 
-SQLALCHEMY_DATABASE_URI = f"sqlite:///{DATABASE_PATH}"
+# Use SQLite locally and a managed database (for example Cloud SQL) in Google
+# Cloud. SQLAlchemy 2 expects the PostgreSQL driver prefix when DATABASE_URL
+# is supplied by a hosting provider.
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+
+SQLALCHEMY_DATABASE_URI = DATABASE_URL or f"sqlite:///{DATABASE_PATH}"
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # ==============================
 # Secret Key
 # ==============================
-SECRET_KEY = "AI_Attendance_System_2026"
+SECRET_KEY = os.getenv("SECRET_KEY", "local-development-secret-change-me")
+
+# Fixed port used by the local Flask server.
+PORT = 5001
+
+# For local development, default to plain HTTP so browsers can connect without
+# a self-signed certificate warning. Set ENABLE_HTTPS=1 only when you want to
+# serve with Flask's temporary certificate on localhost.
+ENABLE_HTTPS = os.getenv("ENABLE_HTTPS", "0").lower() in {"1", "true", "yes"}
 
 # ==============================
 # Dataset Paths
 # ==============================
-DATASET_FOLDER = os.path.join(BASE_DIR, "dataset")
+DATASET_FOLDER = os.getenv("DATASET_FOLDER", os.path.join(BASE_DIR, "dataset"))
 
 FACE_DATASET = os.path.join(DATASET_FOLDER, "faces")
 VOICE_DATASET = os.path.join(DATASET_FOLDER, "voices")
@@ -30,12 +47,12 @@ VOICE_DATASET = os.path.join(DATASET_FOLDER, "voices")
 # ==============================
 # Upload Folder
 # ==============================
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", os.path.join(BASE_DIR, "uploads"))
 
 # ==============================
 # Reports Folder
 # ==============================
-REPORT_FOLDER = os.path.join(BASE_DIR, "reports")
+REPORT_FOLDER = os.getenv("REPORT_FOLDER", os.path.join(BASE_DIR, "reports"))
 
 # ==============================
 # Static Folder

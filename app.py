@@ -2,6 +2,7 @@ import base64
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, session
 from datetime import datetime, timedelta
 from functools import wraps
+from werkzeug.security import check_password_hash
 import io
 import random
 import smtplib
@@ -15,6 +16,7 @@ import numpy as np
 import face_recognition
 from scipy.io import wavfile
 import json
+from sqlalchemy import text
 
 try:
     import imageio_ffmpeg
@@ -48,9 +50,30 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
 
 
+@app.after_request
+def add_media_security_headers(response):
+    response.headers["Permissions-Policy"] = "camera=(self), microphone=(self)"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @app.errorhandler(413)
 def request_entity_too_large(error):
     return jsonify({"success": False, "message": "Request entity too large. Reduce upload size or increase MAX_CONTENT_LENGTH."}), 413
+
+
+@app.route("/healthz")
+def healthz():
+    return jsonify({"status": "ok"})
+
+
+@app.route("/readyz")
+def readyz():
+    try:
+        db.session.execute(text("SELECT 1"))
+        return jsonify({"status": "ready"})
+    except Exception:
+        return jsonify({"status": "not ready"}), 503
 
 # ==========================================
 # Configuration
@@ -397,12 +420,17 @@ def login():
         password = request.form.get("password", "").strip()
 
         admin = Admin.query.filter_by(username=username).first()
-        if admin and admin.password == password:
-            session["admin_logged_in"] = True
-            session["admin_username"] = admin.username
-            session.pop("teacher_grade", None)
-            flash("Admin login successful.", "success")
-            return redirect(url_for("teacher_grade", next=request.args.get("next")))
+        if admin:
+            stored_password = admin.password or ""
+            password_matches = (
+                stored_password == password or check_password_hash(stored_password, password)
+            )
+            if password_matches:
+                session["admin_logged_in"] = True
+                session["admin_username"] = admin.username
+                session.pop("teacher_grade", None)
+                flash("Admin login successful.", "success")
+                return redirect(url_for("teacher_grade", next=request.args.get("next")))
 
         flash("Invalid username or password.", "danger")
 
@@ -1085,12 +1113,18 @@ def students_api():
 def delete_student_api():
     data = request.get_json() or {}
     roll_number = data.get("roll_number")
+    teacher_grade = session.get("teacher_grade")
 
     if not roll_number:
         return jsonify({"success": False, "message": "roll_number is required."}), 400
+    if not teacher_grade:
+        return jsonify({"success": False, "message": "Select a class before deleting a student."}), 403
 
     try:
-        student = Student.query.filter_by(roll_number=roll_number).first()
+        student = Student.query.filter_by(
+            roll_number=roll_number,
+            year=teacher_grade
+        ).first()
         if not student:
             return jsonify({"success": False, "message": "Student not found."}), 404
 
@@ -1151,9 +1185,9 @@ def info():
 # Run Server
 # ==========================================
 if __name__ == "__main__":
-
     app.run(
-        debug=True,
+        debug=os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes"},
         host="0.0.0.0",
-        port=5000
+        port=config.PORT,
+        ssl_context="adhoc" if config.ENABLE_HTTPS else None
     )

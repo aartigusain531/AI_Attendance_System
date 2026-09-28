@@ -121,13 +121,12 @@
 </td>
 
 <td>
-    <button class="delete-btn" onclick="deleteStudent('{{ student.roll_number }}', this)">Delete</button>
+    <button class="delete-btn" onclick="deleteStudent('{{ student.roll_number }}', '{{ student.year }}', this)">Delete</button>
 </td>
 
 </tr>
 
 {% endfor %}
-
 </table>
 
 <script>
@@ -147,7 +146,7 @@ async function loadTodayAttendance(){
 document.getElementById('refreshAttendance').addEventListener('click', loadTodayAttendance);
 loadTodayAttendance();
 
-async function deleteStudent(roll, button) {
+async function deleteStudent(roll, year, button) {
     if (!confirm(`Delete student ${roll}? This will remove the student and all related attendance records.`)) {
         return;
     }
@@ -158,7 +157,7 @@ async function deleteStudent(roll, button) {
         const res = await fetch('/api/delete_student', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ roll_number: roll })
+            body: JSON.stringify({ roll_number: roll, year: year })
         });
         const data = await res.json();
         if (!res.ok || !data.success) {

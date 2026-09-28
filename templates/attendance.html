@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Auto Attendance</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="{{ url_for('static', filename='js/media-permissions.js') }}"></script>
     <style>
         body {
             background: #0f172a;
@@ -104,6 +105,7 @@
             </p>
             <video id="video" autoplay playsinline muted></video>
             <div class="status" id="status">Initializing camera...</div>
+            <button id="enableDevicesButton" type="button" onclick="enableDevices()">Enable Camera & Microphone</button>
             <button id="retryButton" type="button" onclick="startRecognition()" style="display:none;">Try Again</button>
             <button id="useVoiceButton" type="button" style="display:none;margin-left:10px;" onclick="useVoiceOnly()">Use Voice Only</button>
             <button id="backButton" type="button" style="display:none;margin-left:10px;" onclick="resetToCamera()">Back</button>
@@ -140,16 +142,27 @@
         }
 
         function getMedia(constraints) {
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                return navigator.mediaDevices.getUserMedia(constraints);
+            return AttendanceMedia.request(constraints);
+        }
+
+        async function enableDevices() {
+            const button = document.getElementById("enableDevicesButton");
+            button.disabled = true;
+            statusEl.textContent = "Allow camera and microphone in the Chrome prompt...";
+            try {
+                const stream = await AttendanceMedia.requestBoth();
+                const audioTracks = stream.getAudioTracks();
+                audioTracks.forEach(track => track.stop());
+                video.srcObject = stream;
+                button.style.display = "none";
+                statusEl.textContent = "Camera and microphone ready. Looking for a registered student...";
+                startRecognition();
+            } catch (error) {
+                button.disabled = false;
+                statusEl.textContent = `⚠️ ${AttendanceMedia.describe(error, "Camera and microphone")}`;
+                retryButton.style.display = "inline-block";
+                console.error("Device permission request failed:", error);
             }
-            const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-            if (!legacy) {
-                return Promise.reject(new Error("getUserMedia is not supported."));
-            }
-            return new Promise((resolve, reject) => {
-                legacy.call(navigator, constraints, resolve, reject);
-            });
         }
 
         async function requestMicrophone(constraints, retries = 1) {
@@ -230,7 +243,7 @@
                 // hide voice-only option when camera works
                 if (useVoiceButton) useVoiceButton.style.display = "none";
             } catch (err) {
-                statusEl.textContent = "⚠️ Camera access denied or unavailable.";
+                statusEl.textContent = `⚠️ ${AttendanceMedia.describe(err, "Camera")}`;
                 retryButton.style.display = "inline-block";
                 if (useVoiceButton) useVoiceButton.style.display = "inline-block";
                 console.error(err);
@@ -315,9 +328,6 @@
             attendanceInProgress = true;
 
             try {
-                if (window.location.protocol !== "https:" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-                    throw new Error("Microphone access requires HTTPS or localhost.");
-                }
                 stopActiveAudioStream();
                 const stream = await requestMicrophone(Object.assign({
                     audio: {
@@ -375,9 +385,6 @@
             statusEl.textContent = "🎤 Recording voice for fallback verification...";
 
             try {
-                if (window.location.protocol !== "https:" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-                    throw new Error("Microphone access requires HTTPS or localhost.");
-                }
                 stopActiveAudioStream();
                 const stream = await requestMicrophone(Object.assign({
                     audio: {

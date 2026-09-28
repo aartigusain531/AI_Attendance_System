@@ -1,0 +1,13 @@
+.git
+.gitignore
+.venv
+node_modules
+.expo
+__pycache__
+*.pyc
+*.pyo
+*.db
+dataset/faces/*
+dataset/voices/*
+uploads/*
+reports/*

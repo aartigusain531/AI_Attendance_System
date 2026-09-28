@@ -16,9 +16,14 @@ def load_face_encodings():
     if not os.path.exists(MODEL_FILE):
         return [], []
 
-    with open(MODEL_FILE, "rb") as f:
-        data = pickle.load(f)
-        return data.get("encodings", []), data.get("names", [])
+    try:
+        with open(MODEL_FILE, "rb") as f:
+            data = pickle.load(f)
+    except (ModuleNotFoundError, AttributeError, EOFError, pickle.UnpicklingError, ValueError) as error:
+        print(f"Unable to load face model '{MODEL_FILE}': {error}. Starting with no known faces.")
+        return [], []
+
+    return data.get("encodings", []), data.get("names", [])
 
 
 known_face_encodings, known_face_names = load_face_encodings()

@@ -21,7 +21,14 @@ python3 -m pip install -r requirements.txt --break-system-packages
 python3 app.py
 ```
 
-**Access the application:** http://localhost:5000
+**Access the application:** https://localhost:5001
+
+The server listens on `0.0.0.0` on fixed local port `5001`. Local development
+uses Flask's temporary HTTPS certificate so camera and microphone access also
+works from another device on the same network. Open the `https://` address
+printed by the launcher and accept the browser's certificate warning once.
+Set `ENABLE_HTTPS=0` only when HTTPS is terminated by a reverse proxy or
+hosting platform.
 
 ---
 
@@ -164,7 +171,10 @@ python3 -m pip install -r requirements.txt --break-system-packages --force-reins
 
 ### Camera/Microphone Issues
 - Ensure webcam is connected
-- Check microphone permissions
+- Use Chrome's address bar lock icon to set Camera and Microphone to **Allow**, then reload.
+- `localhost` works over HTTP. A phone or another computer must use HTTPS; plain `http://192.168.x.x:5000` is blocked by Chrome by design.
+- On the server computer, open `https://localhost:5001` and accept the development certificate warning. On another device, open `https://<server-ip>:5001` using the server's LAN IP, accept the warning, then allow Camera and Microphone. If the page does not load, allow TCP port 5001 through the server firewall. For Google Cloud Run, keep `ENABLE_HTTPS=0`; Cloud Run provides HTTPS at its public URL.
+- Camera and microphone permission cannot be silently forced by a website. Chrome requires the user to approve it for privacy and security.
 - Update OpenCV: `pip install opencv-python --upgrade`
 
 ---
@@ -189,12 +199,37 @@ python3 -m pytest tests/
 
 ### Production Setup
 ```bash
-# Install production server
-pip install gunicorn
+# Install dependencies, including Gunicorn
+python3 -m pip install -r requirements.txt
 
 # Run with Gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
+PORT=5000 gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 180 app:app
 ```
+
+### Google Cloud Run
+
+Cloud Run is the recommended Google deployment target:
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/ai-attendance
+gcloud run deploy ai-attendance \
+    --image gcr.io/YOUR_PROJECT_ID/ai-attendance \
+    --region YOUR_REGION \
+    --allow-unauthenticated \
+    --set-env-vars SECRET_KEY="REPLACE_WITH_A_LONG_RANDOM_VALUE",ENABLE_HTTPS=0
+```
+
+Cloud Run's local filesystem is temporary. SQLite, uploaded faces, voices,
+and reports are suitable for local development only. For production, set
+`DATABASE_URL` to managed PostgreSQL/Cloud SQL and move dataset/report files
+to durable object storage or a mounted persistent volume. The application
+reads `DATABASE_URL`, `DATASET_FOLDER`, `UPLOAD_FOLDER`, and `REPORT_FOLDER`
+from the environment.
+
+Cloud Run supplies `PORT` automatically. The included `Dockerfile` starts
+Gunicorn on that port and exposes `/healthz` and `/readyz`.
 
 ### Docker
 ```bash
@@ -202,7 +237,7 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 docker build -t ai-attendance .
 
 # Run container
-docker run -p 5000:5000 ai-attendance
+docker run --env PORT=8080 -p 5000:8080 ai-attendance
 ```
 
 ---
