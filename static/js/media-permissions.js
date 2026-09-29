@@ -39,8 +39,22 @@
         return navigator.mediaDevices.getUserMedia(constraints);
     }
 
+    function combineStreams(videoStream, audioStream) {
+        const combinedStream = new MediaStream();
+
+        if (videoStream) {
+            videoStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
+        }
+
+        if (audioStream) {
+            audioStream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+        }
+
+        return combinedStream;
+    }
+
     async function requestBoth() {
-        return request({
+        const preferredConstraints = {
             video: {
                 facingMode: { ideal: "user" },
                 width: { ideal: 1280 },
@@ -52,7 +66,49 @@
                 autoGainControl: true,
                 channelCount: { ideal: 1 }
             }
-        });
+        };
+
+        try {
+            return await request(preferredConstraints);
+        } catch (error) {
+            const isDeviceBusy = error && (
+                error.name === "NotReadableError" ||
+                error.name === "AbortError" ||
+                /already in use|Could not start video source/i.test(error.message || "")
+            );
+
+            if (!isDeviceBusy) {
+                throw error;
+            }
+
+            console.warn("Combined camera/audio request failed. Retrying with simpler device constraints:", error);
+
+            let videoStream = null;
+            let audioStream = null;
+
+            try {
+                videoStream = await request({ video: { facingMode: "user" } });
+            } catch (videoError) {
+                console.warn("Video-only fallback failed:", videoError);
+                try {
+                    videoStream = await request({ video: true });
+                } catch (fallbackVideoError) {
+                    console.warn("Basic video fallback failed:", fallbackVideoError);
+                }
+            }
+
+            try {
+                audioStream = await request({ audio: true });
+            } catch (audioError) {
+                console.warn("Audio-only fallback failed:", audioError);
+            }
+
+            if (!videoStream && !audioStream) {
+                throw error;
+            }
+
+            return combineStreams(videoStream, audioStream);
+        }
     }
 
     window.AttendanceMedia = {
