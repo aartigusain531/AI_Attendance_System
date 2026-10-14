@@ -63,7 +63,11 @@
         <h1 style="margin:0;">🤖 AI Attendance Dashboard</h1>
         <span style="padding:6px 10px;border:1px solid #22d3ee;border-radius:8px;color:#67e8f9;">Grade: {{ session.get('teacher_grade') }}</span>
     </div>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        {% if session.get('admin_logged_in') and session.get('admin_username', '').lower() == 'admin' %}
+        <a href="/admin/teachers" style="padding:8px 14px;border-radius:8px;border:none;background:#22c55e;color:white;font-weight:700;cursor:pointer;text-decoration:none;">Manage Teachers</a>
+        <a href="/teacher-grade" style="padding:8px 14px;border-radius:8px;border:none;background:#f59e0b;color:white;font-weight:700;cursor:pointer;text-decoration:none;">Assign Grade</a>
+        {% endif %}
         <a href="/logout" style="padding:8px 14px;border-radius:8px;border:none;background:#ef4444;color:white;font-weight:700;cursor:pointer;text-decoration:none;">Logout</a>
         <button onclick="history.back()" style="padding:8px 14px;border-radius:8px;border:none;background:#00c8ff;color:black;font-weight:700;cursor:pointer;">Back</button>
     </div>
