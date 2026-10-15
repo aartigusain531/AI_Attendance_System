@@ -386,11 +386,7 @@ TEACHER_GRADES = [
 
 @app.route("/")
 def home():
-    if session.get("admin_logged_in"):
-        if not session.get("teacher_grade"):
-            return redirect(url_for("teacher_grade"))
-        return render_template("index.html")
-    return redirect(url_for("login"))
+    return render_template("index.html")
 
 
 def admin_required(f):
@@ -410,11 +406,15 @@ def admin_required(f):
 # ==========================================
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if session.get("admin_logged_in"):
-        if not session.get("teacher_grade"):
-            return redirect(url_for("teacher_grade"))
-        return redirect(url_for("home"))
+    return handle_login("Admin")
 
+
+@app.route("/teacher-login", methods=["GET", "POST"])
+def teacher_login():
+    return handle_login("Teacher")
+
+
+def handle_login(login_role):
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
@@ -429,12 +429,12 @@ def login():
                 session["admin_logged_in"] = True
                 session["admin_username"] = admin.username
                 session.pop("teacher_grade", None)
-                flash("Admin login successful.", "success")
+                flash("Login successful.", "success")
                 return redirect(url_for("teacher_grade", next=request.args.get("next")))
 
         flash("Invalid username or password.", "danger")
 
-    return render_template("login.html")
+    return render_template("login.html", login_role=login_role)
 
 
 @app.route("/teacher-grade", methods=["GET", "POST"])
@@ -449,7 +449,7 @@ def teacher_grade():
             return render_template("teacher_grade.html", grades=TEACHER_GRADES, next_url=next_url)
 
         session["teacher_grade"] = selected_grade
-        return redirect(next_url or url_for("home"))
+        return redirect(next_url or url_for("dashboard"))
 
     return render_template("teacher_grade.html", grades=TEACHER_GRADES, next_url=next_url)
 
@@ -680,6 +680,7 @@ def register():
 # ==========================================
 # Reset faces, voices and student data
 @app.route("/reset", methods=["POST"])
+@admin_required
 def reset_data():
     try:
         # Delete face folders but keep the parent directory

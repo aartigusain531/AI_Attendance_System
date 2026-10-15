@@ -29,12 +29,9 @@
 
         <li><a href="/">Home</a></li>
 
-        <li><a href="/register">Register</a></li>
+        <li><a href="{{ url_for('login') }}">Admin Login</a></li>
 
-        <li><a href="/attendance">Attendance</a></li>
-
-        <li><a href="/dashboard">Dashboard</a></li>
-        <li><a href="/login">Admin Login</a></li>
+        <li><a href="{{ url_for('teacher_login') }}">Teacher Login</a></li>
 
     </ul>
 
@@ -58,23 +55,13 @@
 
         <div class="buttons">
 
-            <a href="/register" class="btn">
-
-                Register Student
-
+            <a href="{{ url_for('login') }}" class="btn">
+                Admin Login
             </a>
 
-            <a href="/attendance" class="btn">
-
-                Start Attendance
-
+            <a href="{{ url_for('teacher_login') }}" class="btn" style="background:#a5f3fc;">
+                Teacher Login
             </a>
-
-            <form action="/reset" method="POST" onsubmit="return confirm('Clear all saved faces, voices and student records? This cannot be undone.');" style="display:inline-block; margin-left:10px;">
-                <button type="submit" class="btn" style="background:#ef4444;color:#ffffff; border:none;">
-                    Reset All Data
-                </button>
-            </form>
 
         </div>
 

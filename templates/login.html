@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teacher Login</title>
+    <title>{{ login_role }} Login | AI Attendance</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: Arial, sans-serif; }
@@ -21,14 +21,16 @@
         .alert { padding: 12px; border-radius: 8px; font-size: 14px; margin-bottom: 10px; }
         .alert-danger { background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; }
         .alert-success { background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; color: #86efac; }
+        .alert-warning { background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: #fcd34d; }
         .help-text { text-align: center; margin-top: 20px; color: #cbd5e1; font-size: 13px; }
+        .help-text a { color: #67e8f9; }
     </style>
 </head>
 <body>
     <div class="login-container">
         <div class="login-header">
             <h1>🤖 AI Attendance</h1>
-            <p>Teacher Login</p>
+            <p>{{ login_role }} Login</p>
         </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -54,8 +56,14 @@
         </form>
 
         <div class="help-text">
-            <p>Use your teacher username and password.</p>
-            <p>Select your grade after signing in.</p>
+            <p>Sign in with your existing attendance system account.</p>
+            {% if login_role == "Teacher" %}
+                <p>Select your grade after signing in.</p>
+                <p><a href="{{ url_for('login') }}">Admin Login</a></p>
+            {% else %}
+                <p><a href="{{ url_for('teacher_login') }}">Teacher Login</a></p>
+            {% endif %}
+            <p><a href="{{ url_for('home') }}">Back to home</a></p>
         </div>
     </div>
 </body>
