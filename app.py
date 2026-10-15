@@ -40,6 +40,7 @@ from models.database import (
 )
 
 from models.attendance import AttendanceManager
+from assistant.attendance_assistant import answer_attendance_question
 
 # ==========================================
 # Create Flask App
@@ -543,6 +544,28 @@ def dashboard():
         attendance=attendance,
         teacher_grade=teacher_grade
     )
+
+
+@app.route("/api/attendance-assistant", methods=["POST"])
+@admin_required
+def attendance_assistant_api():
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "message": "Please send a JSON object with a question."}), 400
+    question = data.get("question")
+    if not isinstance(question, str):
+        question = ""
+    question = question.strip()
+    if not question:
+        return jsonify({"success": False, "message": "Please enter a question."}), 400
+    if len(question) > 300:
+        return jsonify({"success": False, "message": "Please keep your question under 300 characters."}), 400
+    try:
+        message = answer_attendance_question(question, session["teacher_grade"])
+    except ValueError as error:
+        return jsonify({"success": False, "message": str(error)}), 400
+    return jsonify({"success": True, "message": message})
+
 
 # ==========================================
 # Register Student (Admin Only)

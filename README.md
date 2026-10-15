@@ -5,7 +5,7 @@
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.11 (recommended for the pinned computer-vision dependencies)
 - pip (Python package manager)
 
 ### Installation
@@ -14,11 +14,29 @@
 # Navigate to project directory
 cd AI_Attendance_System
 
-# Install dependencies
-python3 -m pip install -r requirements.txt --break-system-packages
+# Create and activate an isolated environment
+python3.11 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies inside the environment
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
 # Run the application
-python3 app.py
+python app.py
+```
+
+Ubuntu 26.04 ships Python 3.14 by default, which is not compatible with this
+project's pinned computer-vision dependencies. If `python3.11` is unavailable,
+install a managed Python 3.11 without replacing the system Python:
+
+```bash
+python3 -m venv "$HOME/.cache/ai-attendance-uv"
+"$HOME/.cache/ai-attendance-uv/bin/python" -m pip install uv
+"$HOME/.cache/ai-attendance-uv/bin/uv" python install 3.11
+"$HOME/.cache/ai-attendance-uv/bin/uv" venv --seed --python 3.11 .venv
+"$HOME/.cache/ai-attendance-uv/bin/uv" pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python app.py
 ```
 
 **Access the application:** https://localhost:5001
@@ -40,6 +58,7 @@ hosting platform.
 ✅ **Voice Recognition** - Voice-based verification  
 ✅ **Attendance Marking** - Automatic and manual attendance  
 ✅ **Dashboard** - Real-time attendance statistics  
+✅ **Attendance Assistant** - Ask natural-language questions about live student and attendance records
 ✅ **Reports** - Generate attendance reports  
 ✅ **OTP Authentication** - Email-based OTP verification  
 
@@ -61,6 +80,9 @@ AI_Attendance_System/
 │   ├── face.py           # Face recognition
 │   ├── voice.py          # Voice recognition
 │   └── train_face.py     # Face model training
+│
+├── assistant/
+│   └── attendance_assistant.py # Live database-backed attendance Q&A
 │
 ├── templates/            # Flask HTML templates
 │   ├── index.html
@@ -127,7 +149,14 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 - `POST /api/recognize_voice` - Voice recognition
 - `POST /api/mark_attendance` - Mark attendance
 - `POST /api/delete_student` - Delete student
+- `POST /api/attendance-assistant` - Answer an admin's attendance question from the live database for the selected grade
 - `GET /api/info` - API information
+
+The dashboard assistant reads the current student and attendance tables for
+the selected grade each time it answers. Absences are calculated from the
+registered-student roster and that date's attendance records; it does not
+maintain a separate copy of the data or send student information to an
+external AI service. Questions can include a date in `YYYY-MM-DD` format.
 
 ---
 
