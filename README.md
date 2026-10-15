@@ -112,8 +112,13 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 - `GET /` - Dashboard home
 - `GET /login` - Admin login
 - `POST /login` - Login verification
+- `GET /teacher-login` - Teacher login
+- `GET /teacher-grade` - Select an available grade
+- `GET /admin/teachers` - Create teacher accounts and assign multiple grades
 - `GET /logout` - Logout
-- `GET /dashboard` - Admin dashboard
+- `GET /dashboard` - Dashboard for the selected grade
+
+Admins can create teacher accounts from **Manage Teachers**, assign one or more grades, and update assignments later. Teachers sign in separately and can select only grades assigned to their account.
 
 ### Student Routes
 - `GET /register` - Registration form
@@ -137,6 +142,7 @@ Automatically creates SQLite database (`attendance.db`) with:
 - **Students** - Student information
 - **Attendance** - Attendance records
 - **Admins** - Admin accounts
+- **Teachers** - Teacher accounts and assigned grades
 
 ---
 
