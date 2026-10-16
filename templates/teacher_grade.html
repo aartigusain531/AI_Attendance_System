@@ -54,16 +54,6 @@
             <button type="submit">Enter Attendance System</button>
         </form>
 
-        {% if is_admin %}
-        <form method="post" style="margin-top: 16px;">
-            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
-            <input type="hidden" name="action" value="add_grade">
-            <div style="display: flex; gap: 10px; margin-top: 12px;">
-                <input type="text" name="new_grade" placeholder="Add custom grade" style="flex:1; min-height: 44px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; padding: 10px;">
-                <button type="submit" style="width: auto; min-width: 120px; margin-top: 0; background: #f59e0b; color: #111827;">Add Grade</button>
-            </div>
-        </form>
-        {% endif %}
     </main>
 </body>
 </html>

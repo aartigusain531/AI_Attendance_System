@@ -155,3 +155,8 @@ def init_database(app):
 
     with app.app_context():
         db.create_all()
+        removed_admins = Admin.query.filter(Admin.username != "admin").delete(
+            synchronize_session=False
+        )
+        if removed_admins:
+            db.session.commit()

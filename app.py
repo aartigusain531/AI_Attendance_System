@@ -438,6 +438,8 @@ def grade_access_required(f):
         ):
             session.pop("admin_logged_in", None)
             session.pop("admin_username", None)
+            if request.endpoint == "attendance_page":
+                return redirect(url_for("home"))
             flash("Please log in to access this page.", "warning")
             return redirect(url_for("login", next=request.path))
 

@@ -19,6 +19,7 @@
         input, select, button { width: 100%; min-height: 42px; padding: 10px; border: 1px solid #4b5563; border-radius: 6px; font: inherit; }
         input, select { background: #111827; color: #f8fafc; }
         button { border-color: #22c55e; background: #22c55e; color: #07130b; font-weight: 700; cursor: pointer; }
+        .delete-button { width: auto; min-width: 160px; margin-top: 12px; border-color: #ef4444; background: #ef4444; color: #fff; }
         .teacher-list { display: grid; gap: 18px; }
         .teacher-card { background: #0b1220; border: 1px solid #374151; border-radius: 10px; padding: 18px; }
         .teacher-header { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
@@ -95,6 +96,11 @@
                             {% endfor %}
                         </div>
                         <button type="submit" class="save-button">Save grades</button>
+                    </form>
+                    <form method="post" onsubmit="return confirm('Delete this teacher account? This cannot be undone.');">
+                        <input type="hidden" name="action" value="delete_teacher">
+                        <input type="hidden" name="teacher_id" value="{{ teacher.id }}">
+                        <button type="submit" class="delete-button">Delete teacher</button>
                     </form>
                 </div>
             {% else %}
