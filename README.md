@@ -140,7 +140,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 - `GET /logout` - Logout
 - `GET /dashboard` - Dashboard for the selected grade
 
-Admins can create teacher accounts from **Manage Teachers**, assign one or more grades, and update assignments later. Teachers sign in separately and can select only grades assigned to their account.
+The only administrator username is `admin`; other administrator accounts are removed during database initialization and when `setup_admin.py` is run. Admin credentials work only on `/login`. Admins can create teacher accounts from **Manage Teachers**, assign one or more grades, update assignments later, and delete teacher accounts. Teacher accounts are stored separately and their credentials work only on `/teacher-login`, where teachers can select only grades assigned to their account.
 
 ### Student Routes
 - `GET /register` - Registration form

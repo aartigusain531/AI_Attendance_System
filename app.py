@@ -394,7 +394,12 @@ def home():
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get("admin_logged_in"):
+        if (
+            not session.get("admin_logged_in")
+            or session.get("admin_username") != "admin"
+        ):
+            session.pop("admin_logged_in", None)
+            session.pop("admin_username", None)
             flash("Please log in as admin to access this page.", "warning")
             return redirect(url_for("login", next=request.path))
         if not session.get("teacher_grade") and request.endpoint != "teacher_grade":
@@ -407,7 +412,13 @@ def admin_required(f):
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get("admin_logged_in") and not session.get("teacher_logged_in"):
+        is_admin = (
+            session.get("admin_logged_in")
+            and session.get("admin_username") == "admin"
+        )
+        if not is_admin and not session.get("teacher_logged_in"):
+            session.pop("admin_logged_in", None)
+            session.pop("admin_username", None)
             flash("Please log in to access this page.", "warning")
             return redirect(url_for("login", next=request.path))
         return f(*args, **kwargs)
@@ -418,7 +429,15 @@ def login_required(f):
 def grade_access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get("admin_logged_in") and not session.get("teacher_logged_in"):
+        if (
+            not session.get("teacher_logged_in")
+            and not (
+                session.get("admin_logged_in")
+                and session.get("admin_username") == "admin"
+            )
+        ):
+            session.pop("admin_logged_in", None)
+            session.pop("admin_username", None)
             flash("Please log in to access this page.", "warning")
             return redirect(url_for("login", next=request.path))
 
@@ -458,7 +477,7 @@ def handle_login(login_role):
         password = request.form.get("password", "").strip()
 
         if login_role == "Admin":
-            account = Admin.query.filter_by(username=username).first()
+            account = Admin.query.filter_by(username="admin").first() if username == "admin" else None
             if account:
                 stored_password = account.password or ""
                 password_matches = (
@@ -472,7 +491,11 @@ def handle_login(login_role):
                 session["admin_logged_in"] = True
                 session["admin_username"] = account.username
         else:
-            account = Teacher.query.filter_by(username=username).first()
+            account = (
+                Teacher.query.filter_by(username=username).first()
+                if username.casefold() != "admin"
+                else None
+            )
             password_matches = bool(
                 account and check_password_hash(account.password or "", password)
             )
@@ -501,7 +524,10 @@ def handle_login(login_role):
 @login_required
 def teacher_grade():
     next_url = request.args.get("next") or request.form.get("next")
-    is_admin = bool(session.get("admin_logged_in"))
+    is_admin = bool(
+        session.get("admin_logged_in")
+        and session.get("admin_username") == "admin"
+    )
     if is_admin:
         available_grades = TEACHER_GRADES
     else:
@@ -539,6 +565,19 @@ def teacher_grade():
 def admin_teachers():
     if request.method == "POST":
         action = request.form.get("action", "add_teacher")
+        if action == "delete_teacher":
+            teacher_id = request.form.get("teacher_id", type=int)
+            teacher = db.session.get(Teacher, teacher_id) if teacher_id else None
+            if not teacher:
+                flash("Teacher account not found.", "danger")
+                return redirect(url_for("admin_teachers"))
+
+            username = teacher.username
+            db.session.delete(teacher)
+            db.session.commit()
+            flash(f"Teacher account {username} deleted.", "success")
+            return redirect(url_for("admin_teachers"))
+
         selected_grades = request.form.getlist("grades")
         if any(grade not in TEACHER_GRADES for grade in selected_grades):
             flash("One or more selected grades are invalid.", "danger")
@@ -568,10 +607,17 @@ def admin_teachers():
         if len(username) > 100:
             flash("Teacher username must be 100 characters or fewer.", "danger")
             return redirect(url_for("admin_teachers"))
-        if (
-            Teacher.query.filter_by(username=username).first()
-            or Admin.query.filter_by(username=username).first()
-        ):
+        normalized_username = username.casefold()
+        username_in_use = (
+            normalized_username == "admin"
+            or db.session.query(Teacher.id).filter(
+                db.func.lower(Teacher.username) == normalized_username
+            ).first() is not None
+            or db.session.query(Admin.id).filter(
+                db.func.lower(Admin.username) == normalized_username
+            ).first() is not None
+        )
+        if username_in_use:
             flash("That username is already in use.", "danger")
             return redirect(url_for("admin_teachers"))
 

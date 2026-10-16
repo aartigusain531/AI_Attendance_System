@@ -19,10 +19,17 @@ def create_admin():
             print("❌ Username cannot be empty")
             return
 
+        if username != "admin":
+            print("❌ The only administrator username is 'admin'.")
+            return
+
         password = input("Enter admin password: ").strip()
         if not password:
             print("❌ Password cannot be empty")
             return
+
+        Admin.query.filter(Admin.username != "admin").delete(synchronize_session=False)
+        db.session.commit()
         
         # Check if username already exists
         admin_exists = Admin.query.filter_by(username=username).first()
@@ -46,4 +53,3 @@ def create_admin():
 
 if __name__ == "__main__":
     create_admin()
-
