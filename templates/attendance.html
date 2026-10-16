@@ -93,7 +93,9 @@
         <ul>
             <li><a href="/">Home</a></li>
             <li><a href="/dashboard">Dashboard</a></li>
+            {% if session.get('admin_logged_in') %}
             <li><a href="/register">Register</a></li>
+            {% endif %}
         </ul>
     </nav>
 

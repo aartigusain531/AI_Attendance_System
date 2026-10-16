@@ -112,6 +112,41 @@ class Admin(db.Model):
     def __repr__(self):
         return f"<Admin {self.username}>"
 
+
+# ==========================
+# Teacher Table
+# ==========================
+class Teacher(db.Model):
+    __tablename__ = "teachers"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    username = db.Column(
+        db.String(100),
+        unique=True,
+        nullable=False
+    )
+
+    password = db.Column(
+        db.String(255),
+        nullable=False
+    )
+
+    assigned_grades = db.Column(
+        db.JSON,
+        nullable=False,
+        default=list
+    )
+
+    created_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow
+    )
+
+    def __repr__(self):
+        return f"<Teacher {self.username}>"
+
+
 # ==========================
 # Initialize Database
 # ==========================

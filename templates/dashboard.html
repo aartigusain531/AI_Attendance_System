@@ -109,8 +109,8 @@
         <span style="padding:6px 10px;border:1px solid #22d3ee;border-radius:8px;color:#67e8f9;">Grade: {{ session.get('teacher_grade') }}</span>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        {% if session.get('admin_logged_in') and session.get('admin_username', '').lower() == 'admin' %}
-        <a href="/admin/teachers" style="padding:8px 14px;border-radius:8px;border:none;background:#22c55e;color:white;font-weight:700;cursor:pointer;text-decoration:none;">Manage Teachers</a>
+        {% if session.get('admin_logged_in') %}
+        <a href="{{ url_for('admin_teachers') }}" style="padding:8px 14px;border-radius:8px;border:none;background:#22c55e;color:white;font-weight:700;cursor:pointer;text-decoration:none;">Manage Teachers</a>
         {% endif %}
         <a href="/logout" style="padding:8px 14px;border-radius:8px;border:none;background:#ef4444;color:white;font-weight:700;cursor:pointer;text-decoration:none;">Logout</a>
         <a href="{{ url_for('teacher_grade') }}" style="padding:8px 14px;border-radius:8px;border:none;background:#f59e0b;color:#111827;font-weight:700;cursor:pointer;text-decoration:none;">Change Grade</a>
@@ -150,7 +150,7 @@
     <th>Department</th>
     <th>Year</th>
     <th>Voice</th>
-    <th>Actions</th>
+    {% if session.get('admin_logged_in') %}<th>Actions</th>{% endif %}
 </tr>
 
 {% for student in students %}
@@ -176,9 +176,11 @@
 </audio>
 </td>
 
+{% if session.get('admin_logged_in') %}
 <td>
     <button class="delete-btn" onclick="deleteStudent('{{ student.roll_number }}', '{{ student.year }}', this)">Delete</button>
 </td>
+{% endif %}
 
 </tr>
 

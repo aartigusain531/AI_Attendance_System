@@ -23,7 +23,13 @@
 <body>
     <main class="grade-container">
         <h1>Choose Your Grade</h1>
-        <p>Select the grade you teach before entering the attendance system.</p>
+        <p>
+            {% if is_admin %}
+                Select a grade to manage its attendance dashboard.
+            {% else %}
+                Select one of the grades assigned to your teacher account.
+            {% endif %}
+        </p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}

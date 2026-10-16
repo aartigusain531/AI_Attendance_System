@@ -13,6 +13,8 @@
         a { color: #67e8f9; }
         .panel { margin-bottom: 28px; padding: 20px; background: #0b1220; border: 1px solid #374151; border-radius: 8px; }
         .teacher-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; }
+        .grade-assignment { grid-column: 1 / -1; }
+        .grade-assignment p { margin: 0 0 8px; color: #cbd5e1; font-size: 14px; }
         label { display: block; margin-bottom: 6px; color: #cbd5e1; font-size: 14px; }
         input, select, button { width: 100%; min-height: 42px; padding: 10px; border: 1px solid #4b5563; border-radius: 6px; font: inherit; }
         input, select { background: #111827; color: #f8fafc; }
@@ -20,6 +22,7 @@
         .teacher-list { display: grid; gap: 18px; }
         .teacher-card { background: #0b1220; border: 1px solid #374151; border-radius: 10px; padding: 18px; }
         .teacher-header { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+        .assigned-summary { margin: 0 0 12px; color: #94a3b8; font-size: 14px; }
         .grade-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 16px; }
         .grade-option { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; background: #111827; border: 1px solid #4b5563; color: #e2e8f0; }
         .grade-option input { width: auto; min-height: auto; margin: 0; }
@@ -54,6 +57,17 @@
                     <input id="password" name="password" type="password" autocomplete="new-password" required>
                 </div>
                 <button type="submit">Add teacher</button>
+                <div class="grade-assignment">
+                    <p>Assign grades (you can change these later):</p>
+                    <div class="grade-grid">
+                        {% for grade in grades %}
+                            <label class="grade-option">
+                                <input type="checkbox" name="grades" value="{{ grade }}">
+                                <span>{{ grade }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
             </form>
         </section>
 
@@ -62,6 +76,13 @@
             {% for teacher in teachers %}
                 <div class="teacher-card">
                     <div class="teacher-header">{{ teacher.username }}</div>
+                    <p class="assigned-summary">
+                        {% if teacher.assigned_grades %}
+                            Assigned grades: {{ teacher.assigned_grades | join(', ') }}
+                        {% else %}
+                            No grades assigned yet.
+                        {% endif %}
+                    </p>
                     <form method="post">
                         <input type="hidden" name="action" value="assign_grades">
                         <input type="hidden" name="teacher_id" value="{{ teacher.id }}">

@@ -56,11 +56,12 @@
         </form>
 
         <div class="help-text">
-            <p>Sign in with your existing attendance system account.</p>
             {% if login_role == "Teacher" %}
-                <p>Select your grade after signing in.</p>
+                <p>Use the teacher account provided by your administrator.</p>
+                <p>Select one of your assigned grades after signing in.</p>
                 <p><a href="{{ url_for('login') }}">Admin Login</a></p>
             {% else %}
+                <p>Sign in with your administrator account.</p>
                 <p><a href="{{ url_for('teacher_login') }}">Teacher Login</a></p>
             {% endif %}
             <p><a href="{{ url_for('home') }}">Back to home</a></p>

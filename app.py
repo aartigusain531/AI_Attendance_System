@@ -2,7 +2,7 @@ import base64
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, session
 from datetime import datetime, timedelta
 from functools import wraps
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 import io
 import random
 import smtplib
@@ -36,6 +36,7 @@ from models.database import (
     Student,
     Attendance,
     Admin,
+    Teacher,
     init_database
 )
 
@@ -402,6 +403,42 @@ def admin_required(f):
 
     return decorated_function
 
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("admin_logged_in") and not session.get("teacher_logged_in"):
+            flash("Please log in to access this page.", "warning")
+            return redirect(url_for("login", next=request.path))
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def grade_access_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("admin_logged_in") and not session.get("teacher_logged_in"):
+            flash("Please log in to access this page.", "warning")
+            return redirect(url_for("login", next=request.path))
+
+        if session.get("teacher_logged_in"):
+            teacher = db.session.get(Teacher, session.get("teacher_id"))
+            if not teacher:
+                session.clear()
+                flash("Your teacher account is unavailable. Please log in again.", "danger")
+                return redirect(url_for("teacher_login"))
+            if session.get("teacher_grade") not in (teacher.assigned_grades or []):
+                session.pop("teacher_grade", None)
+                return redirect(url_for("teacher_grade", next=request.path))
+
+        if not session.get("teacher_grade"):
+            return redirect(url_for("teacher_grade", next=request.path))
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
 # ==========================================
 # Admin Login
 # ==========================================
@@ -420,18 +457,40 @@ def handle_login(login_role):
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
 
-        admin = Admin.query.filter_by(username=username).first()
-        if admin:
-            stored_password = admin.password or ""
-            password_matches = (
-                stored_password == password or check_password_hash(stored_password, password)
-            )
+        if login_role == "Admin":
+            account = Admin.query.filter_by(username=username).first()
+            if account:
+                stored_password = account.password or ""
+                password_matches = (
+                    stored_password == password or check_password_hash(stored_password, password)
+                )
+            else:
+                password_matches = False
+
             if password_matches:
+                session.clear()
                 session["admin_logged_in"] = True
-                session["admin_username"] = admin.username
-                session.pop("teacher_grade", None)
-                flash("Login successful.", "success")
-                return redirect(url_for("teacher_grade", next=request.args.get("next")))
+                session["admin_username"] = account.username
+        else:
+            account = Teacher.query.filter_by(username=username).first()
+            password_matches = bool(
+                account and check_password_hash(account.password or "", password)
+            )
+
+            if password_matches and account:
+                if not account.assigned_grades:
+                    flash("No grades are assigned to your account. Please contact the administrator.", "warning")
+                    return render_template("login.html", login_role=login_role)
+
+                session.clear()
+                session["teacher_logged_in"] = True
+                session["teacher_id"] = account.id
+                session["teacher_username"] = account.username
+
+        if password_matches:
+            session.pop("teacher_grade", None)
+            flash("Login successful.", "success")
+            return redirect(url_for("teacher_grade", next=request.args.get("next")))
 
         flash("Invalid username or password.", "danger")
 
@@ -439,27 +498,104 @@ def handle_login(login_role):
 
 
 @app.route("/teacher-grade", methods=["GET", "POST"])
-@admin_required
+@login_required
 def teacher_grade():
     next_url = request.args.get("next") or request.form.get("next")
+    is_admin = bool(session.get("admin_logged_in"))
+    if is_admin:
+        available_grades = TEACHER_GRADES
+    else:
+        teacher = db.session.get(Teacher, session.get("teacher_id"))
+        if not teacher:
+            session.clear()
+            flash("Your teacher account is unavailable. Please log in again.", "danger")
+            return redirect(url_for("teacher_login"))
+        available_grades = teacher.assigned_grades or []
 
     if request.method == "POST":
         selected_grade = request.form.get("grade", "").strip()
-        if selected_grade not in TEACHER_GRADES:
+        if selected_grade not in available_grades:
             flash("Please select a valid grade.", "danger")
-            return render_template("teacher_grade.html", grades=TEACHER_GRADES, next_url=next_url)
+            return render_template(
+                "teacher_grade.html",
+                grades=available_grades,
+                next_url=next_url,
+                is_admin=is_admin
+            )
 
         session["teacher_grade"] = selected_grade
         return redirect(next_url or url_for("dashboard"))
 
-    return render_template("teacher_grade.html", grades=TEACHER_GRADES, next_url=next_url)
+    return render_template(
+        "teacher_grade.html",
+        grades=available_grades,
+        next_url=next_url,
+        is_admin=is_admin
+    )
+
+
+@app.route("/admin/teachers", methods=["GET", "POST"])
+@admin_required
+def admin_teachers():
+    if request.method == "POST":
+        action = request.form.get("action", "add_teacher")
+        selected_grades = request.form.getlist("grades")
+        if any(grade not in TEACHER_GRADES for grade in selected_grades):
+            flash("One or more selected grades are invalid.", "danger")
+            return redirect(url_for("admin_teachers"))
+
+        assigned_grades = [
+            grade for grade in TEACHER_GRADES if grade in selected_grades
+        ]
+
+        if action == "assign_grades":
+            teacher_id = request.form.get("teacher_id", type=int)
+            teacher = db.session.get(Teacher, teacher_id) if teacher_id else None
+            if not teacher:
+                flash("Teacher account not found.", "danger")
+                return redirect(url_for("admin_teachers"))
+
+            teacher.assigned_grades = assigned_grades
+            db.session.commit()
+            flash(f"Grade assignments saved for {teacher.username}.", "success")
+            return redirect(url_for("admin_teachers"))
+
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        if not username or not password:
+            flash("Teacher username and password are required.", "danger")
+            return redirect(url_for("admin_teachers"))
+        if len(username) > 100:
+            flash("Teacher username must be 100 characters or fewer.", "danger")
+            return redirect(url_for("admin_teachers"))
+        if (
+            Teacher.query.filter_by(username=username).first()
+            or Admin.query.filter_by(username=username).first()
+        ):
+            flash("That username is already in use.", "danger")
+            return redirect(url_for("admin_teachers"))
+
+        teacher = Teacher(
+            username=username,
+            password=generate_password_hash(password),
+            assigned_grades=assigned_grades
+        )
+        db.session.add(teacher)
+        db.session.commit()
+        flash(f"Teacher account {username} created.", "success")
+        return redirect(url_for("admin_teachers"))
+
+    teachers = Teacher.query.order_by(Teacher.username).all()
+    return render_template(
+        "manage_teachers.html",
+        teachers=teachers,
+        grades=TEACHER_GRADES
+    )
 
 
 @app.route("/logout")
 def logout():
-    session.pop("admin_logged_in", None)
-    session.pop("admin_username", None)
-    session.pop("teacher_grade", None)
+    session.clear()
     flash("You have been logged out.", "success")
     return redirect(url_for("login"))
 
@@ -512,7 +648,7 @@ def verify_otp_api():
 # Dashboard
 # ==========================================
 @app.route("/dashboard")
-@admin_required
+@grade_access_required
 def dashboard():
     teacher_grade = session["teacher_grade"]
     students = Student.query.filter_by(year=teacher_grade).all()
@@ -757,6 +893,7 @@ def serve_voice_file(filename):
 # ==========================================
 # Face recognition API for auto-fill
 @app.route("/api/recognize_face", methods=["POST"])
+@grade_access_required
 def recognize_face():
     data = request.get_json() or {}
     image_data = data.get("image")
@@ -836,12 +973,13 @@ def recognize_face():
 # Attendance Page
 # ==========================================
 @app.route("/attendance")
-@admin_required
+@grade_access_required
 def attendance_page():
     return render_template("attendance.html")
 
 
 @app.route("/attendance_calendar")
+@grade_access_required
 def attendance_calendar_page():
     return render_template("attendance_calendar.html")
 
@@ -849,11 +987,16 @@ def attendance_calendar_page():
 # Attendance API
 # ==========================================
 @app.route("/api/attendance")
+@grade_access_required
 def attendance_api():
 
-    attendance = Attendance.query.order_by(
+    students = Student.query.filter_by(year=session["teacher_grade"]).all()
+    student_ids = [student.id for student in students]
+    attendance = Attendance.query.filter(
+        Attendance.student_id.in_(student_ids)
+    ).order_by(
         Attendance.created_at.desc()
-    ).all()
+    ).all() if student_ids else []
 
     data = []
 
@@ -874,6 +1017,7 @@ def attendance_api():
 
 
 @app.route("/api/attendance_for_date")
+@grade_access_required
 def attendance_for_date():
     # Expects ?date=YYYY-MM-DD, defaults to today
     date_str = request.args.get("date")
@@ -886,10 +1030,9 @@ def attendance_for_date():
         target_date = datetime.utcnow().date()
 
     teacher_grade = session.get("teacher_grade")
-    students_query = Student.query.order_by(Student.roll_number)
-    if teacher_grade:
-        students_query = students_query.filter_by(year=teacher_grade)
-    students = students_query.all()
+    students = Student.query.filter_by(year=teacher_grade).order_by(
+        Student.roll_number
+    ).all()
     results = []
     for s in students:
         att = Attendance.query.filter_by(student_id=s.id, date=target_date).first()
@@ -918,6 +1061,7 @@ def attendance_for_date():
 
 
 @app.route("/api/recognize_voice", methods=["POST"])
+@grade_access_required
 def recognize_voice():
     data = request.get_json() or {}
     voice_data = data.get("voice")
@@ -938,6 +1082,8 @@ def recognize_voice():
     student = Student.query.filter_by(roll_number=roll_number).first()
     if not student:
         return jsonify({"recognized": False, "message": "Matched voice but student record missing."})
+    if student.year != session["teacher_grade"]:
+        return jsonify({"recognized": False, "message": "Voice does not match a student in the selected grade."}), 403
 
     success, message = AttendanceManager.mark_attendance(student.roll_number, identifier="roll")
     return jsonify({
@@ -957,6 +1103,7 @@ def recognize_voice():
 
 
 @app.route("/api/voice_best_match", methods=["POST"])
+@grade_access_required
 def voice_best_match():
     data = request.get_json() or {}
     voice_data = data.get("voice")
@@ -1015,7 +1162,7 @@ def voice_best_match():
 
     roll = extract_roll_from_voice_filename(best_match)
     student = Student.query.filter_by(roll_number=roll).first()
-    if not student:
+    if not student or student.year != session["teacher_grade"]:
         return jsonify({"matched": False}), 200
 
     return jsonify({
@@ -1030,13 +1177,14 @@ def voice_best_match():
 
 
 @app.route("/api/mark_attendance_override", methods=["POST"])
+@grade_access_required
 def mark_attendance_override():
     data = request.get_json() or {}
     roll = data.get("roll_number")
     if not roll:
         return jsonify({"success": False, "message": "roll_number required"}), 400
     student = Student.query.filter_by(roll_number=roll).first()
-    if not student:
+    if not student or student.year != session["teacher_grade"]:
         return jsonify({"success": False, "message": "student not found"}), 404
 
     success, message = AttendanceManager.mark_attendance(student.roll_number, identifier="roll")
@@ -1045,6 +1193,7 @@ def mark_attendance_override():
 
 
 @app.route("/api/mark_attendance", methods=["POST"])
+@grade_access_required
 def mark_attendance_api():
     data = request.get_json() or {}
     roll_number = data.get("roll_number")
@@ -1058,7 +1207,7 @@ def mark_attendance_api():
         return jsonify({"success": False, "message": "Voice sample is required for verification."}), 400
 
     teacher_grade = session.get("teacher_grade")
-    if roll_number and teacher_grade:
+    if roll_number:
         student = Student.query.filter_by(roll_number=roll_number).first()
         if not student or student.year != teacher_grade:
             return jsonify({
@@ -1099,6 +1248,11 @@ def mark_attendance_api():
         student = Student.query.filter_by(roll_number=matched_roll).first()
         if not student:
             return jsonify({"success": False, "message": "Matched voice but student record missing."}), 400
+        if student.year != teacher_grade:
+            return jsonify({
+                "success": False,
+                "message": "Voice does not match a student in the selected grade."
+            }), 403
 
         success, message = AttendanceManager.mark_attendance(student.roll_number, identifier="roll")
 
@@ -1112,9 +1266,10 @@ def mark_attendance_api():
 # Student API
 # ==========================================
 @app.route("/api/students")
+@grade_access_required
 def students_api():
 
-    students = Student.query.all()
+    students = Student.query.filter_by(year=session["teacher_grade"]).all()
 
     data = []
 
@@ -1134,6 +1289,7 @@ def students_api():
 # Delete Student
 # ==========================================
 @app.route("/api/delete_student", methods=["POST"])
+@admin_required
 def delete_student_api():
     data = request.get_json() or {}
     roll_number = data.get("roll_number")
