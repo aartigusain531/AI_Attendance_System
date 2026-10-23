@@ -410,6 +410,66 @@ cursor:pointer;
 
 }
 
+.camera-mic-cta {
+    padding: 0 40px 40px;
+    display: flex;
+    justify-content: center;
+}
+
+.camera-mic-box {
+    width: min(1100px, 100%);
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    box-shadow: 0 20px 45px rgba(0,255,255,0.12);
+    padding: 32px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 22px;
+}
+
+.camera-mic-copy {
+    flex: 1;
+}
+
+.camera-mic-copy h2 {
+    color: #22d3ee;
+    font-size: clamp(2rem, 2.5vw, 3rem);
+    margin-bottom: 12px;
+    line-height: 1.2;
+}
+
+.camera-mic-copy p {
+    color: #dbeafe;
+    font-size: clamp(1.1rem, 1.6vw, 1.5rem);
+    line-height: 1.5;
+    max-width: 620px;
+}
+
+.camera-mic-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #67e8f9, #5eead4);
+    color: #041a40;
+    text-decoration: none;
+    font-weight: 800;
+    border-radius: 12px;
+    padding: 20px 28px;
+    min-height: 82px;
+    white-space: normal;
+    box-shadow: 0 0 25px rgba(103, 232, 249, 0.4);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    text-align: center;
+    font-size: clamp(1.2rem, 1.8vw, 2rem);
+}
+
+.camera-mic-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 35px rgba(103, 232, 249, 0.6);
+}
+
 /* Features */
 
 .features{
@@ -506,6 +566,15 @@ justify-content:center;
 
 flex-wrap:wrap;
 
+}
+
+.camera-mic-box {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.camera-mic-button {
+    width: 100%;
 }
 
 nav{
