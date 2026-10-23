@@ -455,6 +455,7 @@ cursor:pointer;
     color: #041a40;
     text-decoration: none;
     font-weight: 800;
+    border: none;
     border-radius: 12px;
     padding: 20px 28px;
     min-height: 82px;
@@ -463,6 +464,8 @@ cursor:pointer;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     text-align: center;
     font-size: clamp(1.2rem, 1.8vw, 2rem);
+    cursor: pointer;
+    font-family: 'Poppins', sans-serif;
 }
 
 .camera-mic-button:hover {

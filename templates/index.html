@@ -93,9 +93,9 @@
             <h2>Ready to take attendance?</h2>
             <p>Use the camera and microphone to recognize students and record attendance for 11th.</p>
         </div>
-        <a href="{{ url_for('attendance_page') }}" class="camera-mic-button">
+        <button type="button" class="camera-mic-button" onclick="window.location.href='{{ url_for('teacher_login') }}';">
             Start Attendance (Camera + Microphone)
-        </a>
+        </button>
     </div>
 </section>
 
