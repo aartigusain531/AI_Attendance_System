@@ -52,51 +52,6 @@
         cursor: not-allowed;
     }
 
-    .assistant-toggle {
-        position: fixed;
-        right: 24px;
-        bottom: 24px;
-        z-index: 20;
-        padding: 13px 18px;
-        border: 0;
-        border-radius: 999px;
-        background: #22d3ee;
-        color: #0f172a;
-        font-size: 15px;
-        font-weight: 700;
-        cursor: pointer;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
-    }
-
-    .assistant-panel {
-        position: fixed;
-        right: 24px;
-        bottom: 84px;
-        z-index: 20;
-        display: flex;
-        flex-direction: column;
-        width: min(390px, calc(100vw - 32px));
-        height: min(520px, calc(100vh - 120px));
-        border: 1px solid #334155;
-        border-radius: 16px;
-        background: #0f172a;
-        box-shadow: 0 16px 48px rgba(0, 0, 0, .5);
-    }
-
-    .assistant-panel[hidden] { display: none; }
-    .assistant-header { padding: 15px 18px; border-bottom: 1px solid #334155; }
-    .assistant-header h2 { margin: 0; color: #67e8f9; font-size: 17px; }
-    .assistant-header p { margin: 5px 0 0; color: #94a3b8; font-size: 12px; }
-    .assistant-messages { flex: 1; overflow-y: auto; padding: 14px; }
-    .assistant-message { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: #1e293b; color: #e2e8f0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
-    .assistant-message.user { margin-left: 24px; background: #164e63; }
-    .assistant-examples { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; }
-    .assistant-examples button { padding: 6px 9px; border: 1px solid #334155; border-radius: 999px; background: transparent; color: #bae6fd; cursor: pointer; }
-    .assistant-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #334155; }
-    .assistant-form input { min-width: 0; flex: 1; padding: 10px; border: 1px solid #475569; border-radius: 8px; background: #111827; color: white; }
-    .assistant-form button { padding: 0 14px; border: 0; border-radius: 8px; background: #22d3ee; color: #0f172a; font-weight: 700; cursor: pointer; }
-    .assistant-form button:disabled { opacity: .6; cursor: wait; }
-
     </style>
 
 </head>
@@ -290,87 +245,6 @@ loadBtn.addEventListener('click', ()=>{
     datePicker.value = today;
     loadForDate(today);
 })();
-</script>
-
-<section id="assistantPanel" class="assistant-panel" aria-label="Attendance assistant" hidden>
-    <div class="assistant-header">
-        <h2>Attendance Assistant</h2>
-        <p>Answers from the latest records in grade {{ teacher_grade }}.</p>
-    </div>
-    <div id="assistantMessages" class="assistant-messages" aria-live="polite">
-        <p class="assistant-message">Ask me about a student's attendance, who is absent, or the class roster.</p>
-    </div>
-    <div class="assistant-examples" aria-label="Example questions">
-        <button type="button">Who is absent?</button>
-        <button type="button">How many students?</button>
-        <button type="button">List students</button>
-    </div>
-    <form id="assistantForm" class="assistant-form">
-        <input id="assistantQuestion" type="text" maxlength="300" placeholder="Ask about attendance..." aria-label="Your question" required>
-        <button id="assistantSend" type="submit">Ask</button>
-    </form>
-</section>
-<button id="assistantToggle" class="assistant-toggle" type="button" aria-expanded="false" aria-controls="assistantPanel">Ask AI Assistant</button>
-
-<script>
-const assistantPanel = document.getElementById('assistantPanel');
-const assistantToggle = document.getElementById('assistantToggle');
-const assistantMessages = document.getElementById('assistantMessages');
-const assistantQuestion = document.getElementById('assistantQuestion');
-const assistantForm = document.getElementById('assistantForm');
-const assistantSend = document.getElementById('assistantSend');
-
-function addAssistantMessage(text, kind) {
-    const message = document.createElement('p');
-    message.className = 'assistant-message' + (kind === 'user' ? ' user' : '');
-    message.textContent = text;
-    assistantMessages.appendChild(message);
-    assistantMessages.scrollTop = assistantMessages.scrollHeight;
-}
-
-assistantToggle.addEventListener('click', () => {
-    assistantPanel.hidden = !assistantPanel.hidden;
-    assistantToggle.setAttribute('aria-expanded', String(!assistantPanel.hidden));
-    if (!assistantPanel.hidden) assistantQuestion.focus();
-});
-
-document.querySelectorAll('.assistant-examples button').forEach(button => {
-    button.addEventListener('click', () => {
-        assistantQuestion.value = button.textContent;
-        assistantForm.requestSubmit();
-    });
-});
-
-assistantForm.addEventListener('submit', async event => {
-    event.preventDefault();
-    const question = assistantQuestion.value.trim();
-    if (!question) return;
-
-    addAssistantMessage(question, 'user');
-    assistantQuestion.value = '';
-    assistantSend.disabled = true;
-    assistantSend.textContent = '...';
-    try {
-        const response = await fetch('/api/attendance-assistant', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question })
-        });
-        const result = await response.json();
-        if (!response.ok || !result.success) {
-            addAssistantMessage(result.message || 'Unable to answer right now. Please try again.', 'assistant');
-        } else {
-            addAssistantMessage(result.message, 'assistant');
-        }
-    } catch (error) {
-        console.error(error);
-        addAssistantMessage('Could not connect to the attendance service. Please try again.', 'assistant');
-    } finally {
-        assistantSend.disabled = false;
-        assistantSend.textContent = 'Ask';
-        assistantQuestion.focus();
-    }
-});
 </script>
 
 </body>

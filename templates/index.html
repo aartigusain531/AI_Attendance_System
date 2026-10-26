@@ -93,48 +93,39 @@
             <h2>Ready to take attendance?</h2>
             <p>Use the camera and microphone to recognize students and record attendance for 11th.</p>
         </div>
-        <button type="button" class="camera-mic-button" onclick="window.location.href='{{ url_for('teacher_login') }}';">
+        <a href="{{ url_for('attendance_page', public=1, grade='11th') }}" class="camera-mic-button">
             Start Attendance (Camera + Microphone)
-        </button>
+        </a>
     </div>
 </section>
 
-<section class="chatbot-section">
-
+<section class="chatbot-section" aria-labelledby="chatbotTitle">
     <div class="chatbot-panel">
-
         <div class="chatbot-header">
-
-            <div class="bot-badge">🤖</div>
-
+            <div class="bot-badge" aria-hidden="true">🤖</div>
             <div>
-
-                <h2>Attendance Assistant</h2>
-
-                <span>Ask about the app or attendance</span>
-
+                <h2 id="chatbotTitle">System Assistant</h2>
+                <span>Ask about features, attendance, or troubleshooting</span>
             </div>
-
         </div>
-
-        <div id="chatbotMessages" class="chatbot-messages">
-
+        <div id="chatbotMessages" class="chatbot-messages" aria-live="polite">
             <div class="message bot-message">
-                Hi! I can explain this AI Attendance System and tell you how present/absent status is marked for a class.
+                Hi! I can explain how this attendance system works, including camera and voice verification, accounts, reports, and permissions. What would you like to know?
             </div>
-
         </div>
-
         <form id="chatbotForm" class="chatbot-form">
-
-            <input id="chatbotInput" type="text" placeholder="Ask: What is this app? Who is present or absent?" autocomplete="off">
-
+            <input
+                id="chatbotInput"
+                type="text"
+                maxlength="300"
+                placeholder="Ask how attendance, login, or the camera works..."
+                aria-label="Ask the system assistant"
+                autocomplete="off"
+                required
+            >
             <button type="submit">Send</button>
-
         </form>
-
     </div>
-
 </section>
 
 <section class="features">
@@ -188,6 +179,7 @@
 </footer>
 
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/system-assistant.js') }}"></script>
 
 </body>
 </html>

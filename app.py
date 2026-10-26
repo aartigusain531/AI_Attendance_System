@@ -42,6 +42,7 @@ from models.database import (
 
 from models.attendance import AttendanceManager
 from assistant.attendance_assistant import answer_attendance_question
+from assistant.system_assistant import answer_system_question
 
 # ==========================================
 # Create Flask App
@@ -429,15 +430,35 @@ def login_required(f):
 def grade_access_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        is_guest_attendance = (
+            session.get("guest_attendance") is True
+            and session.get("teacher_grade") in TEACHER_GRADES
+        )
+        public_grade = request.args.get("grade") or request.form.get("grade")
         if (
             not session.get("teacher_logged_in")
             and not (
                 session.get("admin_logged_in")
                 and session.get("admin_username") == "admin"
             )
+            and request.args.get("public") == "1"
+            and public_grade in TEACHER_GRADES
+        ):
+            session["teacher_grade"] = public_grade
+            session["guest_attendance"] = True
+            return f(*args, **kwargs)
+
+        if (
+            not session.get("teacher_logged_in")
+            and not (
+                session.get("admin_logged_in")
+                and session.get("admin_username") == "admin"
+            )
+            and not is_guest_attendance
         ):
             session.pop("admin_logged_in", None)
             session.pop("admin_username", None)
+            session.pop("guest_attendance", None)
             if request.endpoint == "attendance_page":
                 return redirect(url_for("home"))
             flash("Please log in to access this page.", "warning")
@@ -751,6 +772,58 @@ def attendance_assistant_api():
     return jsonify({"success": True, "message": message})
 
 
+@app.route("/api/system-assistant", methods=["POST"])
+def system_assistant_api():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "message": "Please send a JSON object with a question."}), 400
+
+    question = data.get("question")
+    if not isinstance(question, str):
+        question = ""
+    question = question.strip()
+    if not question:
+        return jsonify({"success": False, "message": "Please enter a question."}), 400
+    if len(question) > 300:
+        return jsonify({"success": False, "message": "Please keep your question under 300 characters."}), 400
+
+    live_data_terms = (
+        "who is present", "who is absent", "list students", "student list",
+        "attendance history", "attendance records", "how many students",
+        "is present", "is absent", "roll number",
+    )
+    if any(term in question.casefold() for term in live_data_terms):
+        is_admin = (
+            session.get("admin_logged_in")
+            and session.get("admin_username") == "admin"
+        )
+        teacher = (
+            db.session.get(Teacher, session.get("teacher_id"))
+            if session.get("teacher_logged_in")
+            else None
+        )
+        grade = session.get("teacher_grade")
+        has_grade_access = (
+            grade in TEACHER_GRADES
+            and (
+                is_admin
+                or (teacher and grade in (teacher.assigned_grades or []))
+            )
+        )
+        if has_grade_access:
+            try:
+                message = answer_attendance_question(question, grade)
+            except ValueError as error:
+                return jsonify({"success": False, "message": str(error)}), 400
+            return jsonify({"success": True, "message": message})
+        return jsonify({
+            "success": True,
+            "message": "Student-specific attendance information is protected. Sign in as an admin or teacher and select an authorized grade to ask about live records.",
+        })
+
+    return jsonify({"success": True, "message": answer_system_question(question)})
+
+
 # ==========================================
 # Register Student (Admin Only)
 # ==========================================
@@ -1023,8 +1096,12 @@ def recognize_face():
 @app.route("/attendance")
 @grade_access_required
 def attendance_page():
+    if request.args.get("public") == "1":
+        requested_grade = request.args.get("grade") or "11th"
+        if requested_grade in TEACHER_GRADES:
+            session["teacher_grade"] = requested_grade
+            session["guest_attendance"] = True
     return render_template("attendance.html")
-
 
 @app.route("/attendance_calendar")
 @grade_access_required

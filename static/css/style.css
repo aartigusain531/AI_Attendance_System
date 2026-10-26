@@ -410,6 +410,14 @@ cursor:pointer;
 
 }
 
+.chatbot-form button:disabled{
+
+opacity:.65;
+
+cursor:wait;
+
+}
+
 .camera-mic-cta {
     padding: 0 40px 40px;
     display: flex;

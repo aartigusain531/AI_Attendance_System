@@ -59,6 +59,7 @@ hosting platform.
 ✅ **Attendance Marking** - Automatic and manual attendance  
 ✅ **Dashboard** - Real-time attendance statistics  
 ✅ **Attendance Assistant** - Ask natural-language questions about live student and attendance records
+✅ **System Assistant** - Ask homepage questions about features, attendance workflows, permissions, and troubleshooting
 ✅ **Reports** - Generate attendance reports  
 ✅ **OTP Authentication** - Email-based OTP verification  
 
@@ -155,6 +156,7 @@ The only administrator username is `admin`; other administrator accounts are rem
 - `POST /api/mark_attendance` - Mark attendance
 - `POST /api/delete_student` - Delete student
 - `POST /api/attendance-assistant` - Answer an admin's attendance question from the live database for the selected grade
+- `POST /api/system-assistant` - Answer system help questions; live student data is returned only to authorized accounts with a selected grade
 - `GET /api/info` - API information
 
 The dashboard assistant reads the current student and attendance tables for
