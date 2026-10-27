@@ -85,9 +85,154 @@
             margin-top: 18px;
             display: none;
         }
+        .upload-mode {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .upload-mode button {
+            margin-top: 0;
+            background: #1e293b;
+            color: #cbd5e1;
+        }
+        .upload-mode button[aria-pressed="true"] {
+            background: #22d3ee;
+            color: #0f172a;
+        }
+        .photo-input {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            border: 1px dashed #22d3ee;
+            border-radius: 12px;
+            background: #111827;
+            color: #cbd5e1;
+        }
+        .upload-status {
+            min-height: 24px;
+            margin-top: 16px;
+            color: #cbd5e1;
+        }
+        .upload-results {
+            padding-left: 22px;
+            line-height: 1.7;
+            overflow-wrap: anywhere;
+        }
+        .upload-results:empty {
+            display: none;
+        }
     </style>
 </head>
 <body>
+    {% if session.get('teacher_logged_in') %}
+    <nav>
+        <div class="logo">🤖 AI Attendance</div>
+        <ul>
+            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="/logout">Logout</a></li>
+        </ul>
+    </nav>
+    <main class="container">
+        <section class="card">
+            <h2>Upload Student Photos — {{ session.get('teacher_grade') }}</h2>
+            <p>Upload a clear photo of a registered student. For bulk attendance, choose several photos at once; a group photo can also mark every recognized student in it.</p>
+            <div class="upload-mode" aria-label="Upload mode">
+                <button id="singleMode" type="button" aria-pressed="true">Single photo</button>
+                <button id="bulkMode" type="button" aria-pressed="false">Bulk photos</button>
+            </div>
+            <form id="photoUploadForm">
+                <label for="photoInput">Student photo(s)</label>
+                <input class="photo-input" id="photoInput" name="photos" type="file" accept="image/*" required>
+                <p id="selectedFiles" class="upload-status">Select one student photo.</p>
+                <button id="uploadButton" type="submit">Upload and Mark Attendance</button>
+            </form>
+            <p id="uploadStatus" class="upload-status" role="status" aria-live="polite"></p>
+            <ol id="uploadResults" class="upload-results"></ol>
+        </section>
+    </main>
+    <script>
+        const photoInput = document.getElementById("photoInput");
+        const selectedFiles = document.getElementById("selectedFiles");
+        const uploadStatus = document.getElementById("uploadStatus");
+        const uploadResults = document.getElementById("uploadResults");
+        const uploadButton = document.getElementById("uploadButton");
+        const singleMode = document.getElementById("singleMode");
+        const bulkMode = document.getElementById("bulkMode");
+
+        function setUploadMode(isBulk) {
+            photoInput.multiple = isBulk;
+            photoInput.value = "";
+            singleMode.setAttribute("aria-pressed", String(!isBulk));
+            bulkMode.setAttribute("aria-pressed", String(isBulk));
+            selectedFiles.textContent = isBulk
+                ? "Select up to 20 photos. Group photos are supported."
+                : "Select one student photo.";
+            uploadStatus.textContent = "";
+            uploadResults.replaceChildren();
+        }
+
+        singleMode.addEventListener("click", () => setUploadMode(false));
+        bulkMode.addEventListener("click", () => setUploadMode(true));
+        photoInput.addEventListener("change", () => {
+            const names = Array.from(photoInput.files, file => file.name);
+            selectedFiles.textContent = names.length
+                ? names.join(", ")
+                : (photoInput.multiple ? "Select up to 20 photos." : "Select one student photo.");
+        });
+
+        document.getElementById("photoUploadForm").addEventListener("submit", async event => {
+            event.preventDefault();
+            if (!photoInput.files.length) {
+                uploadStatus.textContent = "Choose at least one photo first.";
+                return;
+            }
+
+            uploadButton.disabled = true;
+            uploadStatus.textContent = "Uploading and recognizing faces...";
+            uploadResults.replaceChildren();
+
+            try {
+                const formData = new FormData();
+                Array.from(photoInput.files).forEach(file => formData.append("photos", file));
+                const response = await fetch("/api/upload_attendance_photos", {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || "Unable to process the selected photos.");
+                }
+
+                uploadStatus.textContent = data.message;
+                data.photos.forEach(photo => {
+                    const item = document.createElement("li");
+                    item.textContent = photo.error
+                        ? `${photo.filename}: ${photo.error}`
+                        : `${photo.filename}: ${photo.detected_faces} face(s) detected`;
+                    photo.students.forEach(student => {
+                        const detail = document.createElement("div");
+                        detail.textContent = student.recognized
+                            ? `${student.name} (${student.roll_number}) — ${student.message}`
+                            : student.message;
+                        item.appendChild(detail);
+                    });
+                    if (!photo.error && photo.detected_faces === 0) {
+                        const detail = document.createElement("div");
+                        detail.textContent = "No face detected.";
+                        item.appendChild(detail);
+                    }
+                    uploadResults.appendChild(item);
+                });
+            } catch (error) {
+                console.error("Photo attendance upload failed:", error);
+                uploadStatus.textContent = error.message || "Photo upload failed. Please try again.";
+            } finally {
+                uploadButton.disabled = false;
+            }
+        });
+    </script>
+    {% else %}
     <nav>
         <div class="logo">🤖 AI Attendance</div>
         <ul>
@@ -552,5 +697,6 @@
 
         window.onload = initCamera;
     </script>
+    {% endif %}
 </body>
 </html>

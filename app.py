@@ -51,6 +51,8 @@ app = Flask(__name__)
 
 # Registration submits several base64 voice samples in one form.
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
+MAX_ATTENDANCE_PHOTOS = 20
+MAX_ATTENDANCE_PHOTO_BYTES = 10 * 1024 * 1024
 
 
 @app.after_request
@@ -1102,6 +1104,106 @@ def attendance_page():
             session["teacher_grade"] = requested_grade
             session["guest_attendance"] = True
     return render_template("attendance.html")
+
+
+@app.route("/api/upload_attendance_photos", methods=["POST"])
+@grade_access_required
+def upload_attendance_photos():
+    if not session.get("teacher_logged_in"):
+        return jsonify({"success": False, "message": "Photo attendance is available to teachers only."}), 403
+
+    photos = request.files.getlist("photos")
+    if not photos or all(not photo.filename for photo in photos):
+        return jsonify({"success": False, "message": "Choose at least one student photo."}), 400
+    if len(photos) > MAX_ATTENDANCE_PHOTOS:
+        return jsonify({
+            "success": False,
+            "message": f"Upload no more than {MAX_ATTENDANCE_PHOTOS} photos at once."
+        }), 400
+
+    teacher_grade = session["teacher_grade"]
+    students_by_roll = {
+        student.roll_number: student
+        for student in Student.query.filter_by(year=teacher_grade).all()
+    }
+    candidate_encodings = []
+    candidate_students = []
+    for roll_number, encoding in zip(known_face_names, known_face_encodings):
+        student = students_by_roll.get(str(roll_number))
+        if student:
+            candidate_encodings.append(encoding)
+            candidate_students.append(student)
+
+    photo_results = []
+    for photo in photos:
+        filename = photo.filename or "unnamed photo"
+        result = {"filename": filename, "detected_faces": 0, "students": [], "error": None}
+        try:
+            image_bytes = photo.read(MAX_ATTENDANCE_PHOTO_BYTES + 1)
+            if len(image_bytes) > MAX_ATTENDANCE_PHOTO_BYTES:
+                result["error"] = "Photo exceeds the 10 MB limit."
+                photo_results.append(result)
+                continue
+            if not image_bytes:
+                result["error"] = "The selected file is empty."
+                photo_results.append(result)
+                continue
+
+            image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+            if image is None:
+                result["error"] = "This file is not a supported image."
+                photo_results.append(result)
+                continue
+            if image.shape[0] * image.shape[1] > 40_000_000:
+                result["error"] = "Photo dimensions are too large to process."
+                photo_results.append(result)
+                continue
+
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            face_locations = face_recognition.face_locations(rgb_image)
+            face_encodings = face_recognition.face_encodings(rgb_image, face_locations)
+            result["detected_faces"] = len(face_encodings)
+
+            for face_encoding in face_encodings:
+                student = None
+                if candidate_encodings:
+                    distances = face_recognition.face_distance(candidate_encodings, face_encoding)
+                    best_index = int(np.argmin(distances))
+                    if float(distances[best_index]) <= config.FACE_TOLERANCE:
+                        student = candidate_students[best_index]
+
+                if not student:
+                    result["students"].append({
+                        "recognized": False,
+                        "message": "Face not recognized in this class."
+                    })
+                    continue
+
+                marked, message = AttendanceManager.mark_attendance(
+                    student.roll_number,
+                    identifier="roll",
+                    verification_method="Photo Upload"
+                )
+                result["students"].append({
+                    "recognized": True,
+                    "name": student.name,
+                    "roll_number": student.roll_number,
+                    "attendance_marked": marked,
+                    "message": message
+                })
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to process attendance photo %s", filename)
+            result["error"] = "Unable to process this photo. Try a different image."
+
+        photo_results.append(result)
+
+    return jsonify({
+        "success": True,
+        "message": "Photo upload processing complete.",
+        "photos": photo_results
+    })
+
 
 @app.route("/attendance_calendar")
 @grade_access_required

@@ -57,6 +57,7 @@ hosting platform.
 ✅ **Face Recognition** - Automatic student identification  
 ✅ **Voice Recognition** - Voice-based verification  
 ✅ **Attendance Marking** - Automatic and manual attendance  
+✅ **Teacher Photo Attendance** - Mark attendance from a single student photo, multiple photos, or a group photo
 ✅ **Dashboard** - Real-time attendance statistics  
 ✅ **Attendance Assistant** - Ask natural-language questions about live student and attendance records
 ✅ **System Assistant** - Ask homepage questions about features, attendance workflows, permissions, and troubleshooting
@@ -140,6 +141,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 - `GET /admin/teachers` - Create teacher accounts and assign multiple grades
 - `GET /logout` - Logout
 - `GET /dashboard` - Dashboard for the selected grade
+- Teachers can mark attendance from the dashboard by uploading one photo or a bulk selection; recognized faces are limited to the selected grade. Admin attendance remains camera and microphone based.
 
 The only administrator username is `admin`; other administrator accounts are removed during database initialization and when `setup_admin.py` is run. Admin credentials work only on `/login`. Admins can create teacher accounts from **Manage Teachers**, assign one or more grades, update assignments later, and delete teacher accounts. Teacher accounts are stored separately and their credentials work only on `/teacher-login`, where teachers can select only grades assigned to their account.
 
@@ -154,6 +156,7 @@ The only administrator username is `admin`; other administrator accounts are rem
 - `POST /api/recognize_face` - Face recognition
 - `POST /api/recognize_voice` - Voice recognition
 - `POST /api/mark_attendance` - Mark attendance
+- `POST /api/upload_attendance_photos` - Teacher-only single or bulk photo attendance for the selected grade
 - `POST /api/delete_student` - Delete student
 - `POST /api/attendance-assistant` - Answer an admin's attendance question from the live database for the selected grade
 - `POST /api/system-assistant` - Answer system help questions; live student data is returned only to authorized accounts with a selected grade

@@ -75,9 +75,17 @@
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin:18px 0;padding:18px;background:#0b1220;border-radius:10px;">
     <div style="flex:1;min-width:220px;">
         <strong style="color:#22d3ee;">Ready to take attendance?</strong>
+        {% if session.get('teacher_logged_in') %}
+        <p style="color:#cbd5e1;margin:8px 0 0;">Upload one or more student photos to recognize students and record attendance for {{ teacher_grade }}.</p>
+        {% else %}
         <p style="color:#cbd5e1;margin:8px 0 0;">Use the camera and microphone to recognize students and record attendance for {{ teacher_grade }}.</p>
+        {% endif %}
     </div>
+    {% if session.get('teacher_logged_in') %}
+    <a href="{{ url_for('attendance_page') }}" style="align-self:center;padding:12px 18px;border-radius:8px;background:#22d3ee;color:#0f172a;font-weight:700;text-decoration:none;">Upload Student Photos</a>
+    {% else %}
     <a href="{{ url_for('attendance_page') }}" style="align-self:center;padding:12px 18px;border-radius:8px;background:#22d3ee;color:#0f172a;font-weight:700;text-decoration:none;">Start Attendance (Camera + Microphone)</a>
+    {% endif %}
 </div>
 
 <h3>Total Students : {{ total_students }}</h3>

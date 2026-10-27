@@ -5,7 +5,11 @@ from models.database import db, Student, Attendance
 class AttendanceManager:
 
     @staticmethod
-    def mark_attendance(student_identifier, identifier="name"):
+    def mark_attendance(
+        student_identifier,
+        identifier="name",
+        verification_method="Face + Voice"
+    ):
 
         if isinstance(student_identifier, Student):
             student = student_identifier
@@ -33,7 +37,7 @@ class AttendanceManager:
             date=today,
             time=datetime.now().time(),
             status="Present",
-            verification_method="Face + Voice"
+            verification_method=verification_method
         )
 
         db.session.add(attendance)
