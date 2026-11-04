@@ -6,7 +6,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Register Student</title>
+<title>{{ "Edit Student" if editing|default(false) else "Register Student" }}</title>
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <script src="{{ url_for('static', filename='js/media-permissions.js') }}"></script>
@@ -104,7 +104,7 @@ canvas{
 
 <ul>
 
-<li><a href="/">Home</a></li>
+<li><a href="{{ url_for('home') }}">Home</a></li>
 <li><a href="/dashboard">Dashboard</a></li>
 
 </ul>
@@ -115,14 +115,21 @@ canvas{
 
 <div class="card">
 
-<h2>Student Registration</h2>
+<h2>{{ "Edit Student Details" if editing|default(false) else "Student Registration" }}</h2>
 
-<form action="/register" method="POST" id="registerForm">
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% for category, message in messages %}
+<p role="alert" style="color:#fca5a5;">{{ message }}</p>
+{% endfor %}
+{% endwith %}
+
+<form action="{{ url_for('edit_student', student_id=student.id) if editing|default(false) else url_for('register') }}" method="POST" id="registerForm">
 
 <input
 id="name"
 type="text"
 name="name"
+value="{{ student.name if editing|default(false) else '' }}"
 placeholder="Student Name"
 required>
 
@@ -130,13 +137,16 @@ required>
 id="roll"
 type="text"
 name="roll"
+value="{{ student.roll_number if editing|default(false) else '' }}"
 placeholder="Roll Number"
+{% if editing|default(false) %}readonly{% endif %}
 required>
 
 <input
 id="department"
 type="text"
 name="department"
+value="{{ student.department if editing|default(false) else '' }}"
 placeholder="Department"
 required>
 
@@ -144,7 +154,7 @@ required>
 id="year"
 type="text"
 name="year"
-value="{{ session.get('teacher_grade') }}"
+value="{{ student.year if editing|default(false) else session.get('teacher_grade') }}"
 readonly
 required>
 
@@ -152,17 +162,19 @@ required>
 id="phone"
 type="text"
 name="phone"
+value="{{ student.phone or '' if editing|default(false) else '' }}"
 placeholder="Phone Number">
 
 <input
 id="email"
 type="email"
 name="email"
+value="{{ student.email or '' if editing|default(false) else '' }}"
 placeholder="Email">
 
 <button type="submit">
 
-Register Student
+{{ "Save Changes" if editing|default(false) else "Register Student" }}
 
 </button>
 <input type="hidden" name="image" id="image">
@@ -179,7 +191,22 @@ style="display:none;width:100%;margin-top:15px;">
 
 <div class="card">
 
-<h2>Camera Preview</h2>
+<h2>{{ "Replace Face or Voice" if editing|default(false) else "Camera Preview" }}</h2>
+
+{% if editing|default(false) %}
+<p>Leave the face and voice unchanged to keep the current recordings.</p>
+<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+    <img src="{{ url_for('serve_face_image', roll=student.roll_number, filename='face.jpg') }}" alt="Current student face" style="width:160px;border-radius:12px;">
+    {% if student.voice_file %}
+    <audio controls aria-label="Current voice recording">
+        <source src="{{ url_for('serve_voice_file', filename=student.voice_file) }}">
+        Your browser does not support audio.
+    </audio>
+    {% else %}
+    <span>No voice recording is currently saved.</span>
+    {% endif %}
+</div>
+{% endif %}
 
 <video id="video" autoplay playsinline></video>
 
@@ -217,6 +244,7 @@ Waiting...
 
 const video = document.getElementById("video");
 const status = document.getElementById("status");
+const isEditing = {{ "true" if editing|default(false) else "false" }};
 let recognitionInterval;
 let currentlyRecognizing = false;
 
@@ -262,8 +290,12 @@ async function initCamera() {
     try {
         const stream = await getMedia({ video: true });
         video.srcObject = stream;
-        status.innerText = "🎥 Camera ready. Looking for a known student...";
-        recognitionInterval = setInterval(tryAutoRecognize, 3500);
+        status.innerText = isEditing
+            ? "🎥 Camera ready. Capture a replacement face when ready."
+            : "🎥 Camera ready. Looking for a known student...";
+        if (!isEditing) {
+            recognitionInterval = setInterval(tryAutoRecognize, 3500);
+        }
     } catch (err) {
         status.innerText = `⚠️ ${AttendanceMedia.describe(err, "Camera")}`;
         console.error("Camera init failed:", err);
@@ -287,6 +319,10 @@ function captureFrameDataURL() {
 }
 
 async function tryAutoRecognize() {
+    if (isEditing) {
+        return;
+    }
+
     if (currentlyRecognizing) {
         return;
     }
@@ -484,13 +520,13 @@ window.addEventListener("pagehide", () => {
 });
 
 document.getElementById("registerForm").addEventListener("submit", function (e) {
-    if (document.getElementById("image").value == "") {
+    if (!isEditing && document.getElementById("image").value == "") {
         e.preventDefault();
         alert("Please capture your face first.");
         return;
     }
 
-    if (document.getElementById("voices").value == "") {
+    if (!isEditing && document.getElementById("voices").value == "") {
         e.preventDefault();
         alert("Please record your voice samples first.");
         return;

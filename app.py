@@ -1,4 +1,5 @@
 import base64
+import binascii
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory, session
 from datetime import datetime, timedelta
 from functools import wraps
@@ -390,6 +391,11 @@ TEACHER_GRADES = [
 
 
 @app.route("/")
+def start_attendance():
+    return redirect(url_for("attendance_page", public=1, grade="11th"))
+
+
+@app.route("/home")
 def home():
     return render_template("index.html")
 
@@ -958,6 +964,152 @@ def register():
         return redirect(url_for("dashboard"))
 
     return render_template("register.html")
+
+
+@app.route("/students/<int:student_id>/edit", methods=["GET", "POST"])
+@admin_required
+def edit_student(student_id):
+    student = Student.query.filter_by(
+        id=student_id,
+        year=session["teacher_grade"]
+    ).first_or_404()
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        department = request.form.get("department", "").strip()
+        if not name or not department:
+            flash("Student name and department are required.", "danger")
+            return render_template("register.html", student=student, editing=True)
+
+        image_bytes = None
+        image_data = request.form.get("image", "").strip()
+        if image_data:
+            try:
+                header, encoded = image_data.split(",", 1)
+                if header != "data:image/jpeg;base64":
+                    raise ValueError("Capture the face again using the camera.")
+                image_bytes = base64.b64decode(encoded, validate=True)
+                if not image_bytes:
+                    raise ValueError("The captured face image is empty.")
+                if cv2.imdecode(
+                    np.frombuffer(image_bytes, dtype=np.uint8),
+                    cv2.IMREAD_COLOR,
+                ) is None:
+                    raise ValueError("The captured face image is invalid.")
+            except (ValueError, binascii.Error):
+                flash("Unable to read the captured face image. Please capture it again.", "danger")
+                return render_template("register.html", student=student, editing=True)
+
+        voice_samples = None
+        voices_json = request.form.get("voices", "").strip()
+        if voices_json:
+            try:
+                samples = json.loads(voices_json)
+                if not isinstance(samples, list) or not samples:
+                    raise ValueError("Record at least one voice sample.")
+                voice_samples = []
+                extensions = {
+                    "audio/wav": "wav",
+                    "audio/webm": "webm",
+                    "audio/ogg": "ogg",
+                    "audio/mp4": "mp4",
+                }
+                for sample in samples:
+                    if not isinstance(sample, str):
+                        raise ValueError("Invalid voice sample.")
+                    header, encoded = sample.split(",", 1)
+                    mime_type = header.split(";", 1)[0].removeprefix("data:")
+                    extension = extensions.get(mime_type)
+                    if not extension or ";base64" not in header:
+                        raise ValueError("Unsupported voice sample format.")
+                    audio_bytes = base64.b64decode(encoded, validate=True)
+                    if not audio_bytes:
+                        raise ValueError("A voice sample is empty.")
+                    voice_samples.append((extension, audio_bytes))
+            except (ValueError, TypeError, json.JSONDecodeError, binascii.Error):
+                flash("Unable to read the voice samples. Please record them again.", "danger")
+                return render_template("register.html", student=student, editing=True)
+
+        voice_folder = config.VOICE_DATASET
+        os.makedirs(voice_folder, exist_ok=True)
+        staged_voice_files = []
+        staged_face_file = None
+        try:
+            if image_bytes is not None:
+                face_folder = os.path.join(config.FACE_DATASET, student.roll_number)
+                os.makedirs(face_folder, exist_ok=True)
+                file_descriptor, staged_face_file = tempfile.mkstemp(dir=face_folder)
+                with os.fdopen(file_descriptor, "wb") as face_file:
+                    face_file.write(image_bytes)
+
+            if voice_samples is not None:
+                for index, (extension, audio_bytes) in enumerate(voice_samples, start=1):
+                    file_descriptor, staged_path = tempfile.mkstemp(
+                        dir=voice_folder,
+                        prefix=f".{student.roll_number}_{index}_",
+                    )
+                    with os.fdopen(file_descriptor, "wb") as audio_file:
+                        audio_file.write(audio_bytes)
+                    staged_voice_files.append((
+                        staged_path,
+                        f"{student.roll_number}_{index}.{extension}",
+                    ))
+
+            student.name = name
+            student.department = department
+            student.phone = request.form.get("phone", "").strip() or None
+            student.email = request.form.get("email", "").strip() or None
+            if image_bytes is not None:
+                os.replace(
+                    staged_face_file,
+                    os.path.join(config.FACE_DATASET, student.roll_number, "face.jpg"),
+                )
+                staged_face_file = None
+            if voice_samples is not None:
+                replacement_names = {filename for _, filename in staged_voice_files}
+                for staged_path, filename in staged_voice_files:
+                    os.replace(staged_path, os.path.join(voice_folder, filename))
+                student.voice_file = staged_voice_files[0][1]
+                staged_voice_files.clear()
+                for filename in os.listdir(voice_folder):
+                    base_name = os.path.splitext(filename)[0]
+                    is_student_sample = (
+                        base_name == student.roll_number
+                        or (
+                            base_name.startswith(f"{student.roll_number}_")
+                            and base_name[len(student.roll_number) + 1:].isdigit()
+                        )
+                    )
+                    if is_student_sample and filename not in replacement_names:
+                        os.remove(os.path.join(voice_folder, filename))
+
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("Unable to update student %s", student.roll_number)
+            flash("Unable to update student details. Please try again.", "danger")
+            return render_template("register.html", student=student, editing=True), 500
+        finally:
+            if staged_face_file and os.path.exists(staged_face_file):
+                os.remove(staged_face_file)
+            for staged_path, _ in staged_voice_files:
+                if os.path.exists(staged_path):
+                    os.remove(staged_path)
+
+        if image_bytes is not None:
+            try:
+                train_faces()
+                reload_known_faces()
+            except Exception:
+                app.logger.exception("Face model retraining failed after editing student %s", student.roll_number)
+                flash("Student details were updated, but face model retraining failed.", "warning")
+                return redirect(url_for("dashboard"))
+
+        flash("Student details updated successfully.", "success")
+        return redirect(url_for("dashboard"))
+
+    return render_template("register.html", student=student, editing=True)
+
 
 # ==========================================
 # Reset faces, voices and student data

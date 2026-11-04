@@ -133,7 +133,8 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 ## 📊 API Endpoints
 
 ### Admin Routes
-- `GET /` - Dashboard home
+- `GET /` - Start attendance directly for 11th grade
+- `GET /home` - Welcome page with admin and teacher login links
 - `GET /login` - Admin login
 - `POST /login` - Login verification
 - `GET /teacher-login` - Teacher login
