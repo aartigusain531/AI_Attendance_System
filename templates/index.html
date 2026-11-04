@@ -105,20 +105,27 @@
             <div class="bot-badge" aria-hidden="true">🤖</div>
             <div>
                 <h2 id="chatbotTitle">System Assistant</h2>
-                <span>Ask about features, attendance, or troubleshooting</span>
+                <span>Attendance system help · Available anytime</span>
             </div>
+            <button id="chatbotReset" class="chatbot-reset" type="button" aria-label="Start a new chat">New chat</button>
         </div>
         <div id="chatbotMessages" class="chatbot-messages" aria-live="polite">
             <div class="message bot-message">
-                Hi! I can explain how this attendance system works, including camera and voice verification, accounts, reports, and permissions. What would you like to know?
+                Hi! I’m your AI Attendance System assistant. I can explain how to use the app and help troubleshoot setup, login, student registration, camera or voice verification, attendance, and reports. What can I help with?
             </div>
+        </div>
+        <div class="chatbot-suggestions" aria-label="Suggested questions">
+            <button type="button" data-question="How do I take attendance?">How do I take attendance?</button>
+            <button type="button" data-question="My camera is not working">Camera not working</button>
+            <button type="button" data-question="How do teachers access a grade?">Teacher grade access</button>
+            <button type="button" data-question="What information does this system store?">What data is stored?</button>
         </div>
         <form id="chatbotForm" class="chatbot-form">
             <input
                 id="chatbotInput"
                 type="text"
                 maxlength="300"
-                placeholder="Ask how attendance, login, or the camera works..."
+                placeholder="Ask about attendance, login, or a problem..."
                 aria-label="Ask the system assistant"
                 autocomplete="off"
                 required

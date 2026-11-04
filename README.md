@@ -169,6 +169,12 @@ registered-student roster and that date's attendance records; it does not
 maintain a separate copy of the data or send student information to an
 external AI service. Questions can include a date in `YYYY-MM-DD` format.
 
+The homepage System Assistant provides local guidance for setup, accounts,
+grades, student registration, camera and voice verification, attendance,
+reports, privacy, and troubleshooting. It does not require an AI API key or
+send questions to an external service. Live student information is returned
+only to an authorized account with access to the selected grade.
+
 ---
 
 ## 🗄️ Database

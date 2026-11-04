@@ -1,3 +1,4 @@
+
 import re
 from datetime import datetime, timedelta
 
@@ -57,7 +58,10 @@ def answer_attendance_question(question, grade):
         ):
             full_name_matches.append(student)
     if full_name_matches:
-        longest_name = max(len(re.findall(r"[a-z0-9]+", item.name.casefold())) for item in full_name_matches)
+        longest_name = max(
+            len(re.findall(r"[a-z0-9]+", item.name.casefold()))
+            for item in full_name_matches
+        )
         matched_students = [
             item for item in full_name_matches
             if len(re.findall(r"[a-z0-9]+", item.name.casefold())) == longest_name
@@ -76,8 +80,14 @@ def answer_attendance_question(question, grade):
         ]
 
     if len(matched_students) > 1:
-        names = ", ".join(f"{student.name} ({student.roll_number})" for student in matched_students[:10])
-        message = f"I found more than one matching student in grade {grade}: {names}. Please include a roll number."
+        names = ", ".join(
+            f"{student.name} ({student.roll_number})"
+            for student in matched_students[:10]
+        )
+        message = (
+            f"I found more than one matching student in grade {grade}: "
+            f"{names}. Please include a roll number."
+        )
     elif len(matched_students) == 1:
         student = matched_students[0]
         history_requested = any(
@@ -94,7 +104,8 @@ def answer_attendance_question(question, grade):
                 for record in records[:20]
             ]
             message = (
-                f"{student.name} ({student.roll_number}) has {len(records)} attendance record(s)."
+                f"{student.name} ({student.roll_number}) has {len(records)} "
+                "attendance record(s)."
                 + ("\n" + "\n".join(history) if history else "\nNo attendance records found.")
                 + ("\nShowing the latest 20 records." if len(records) > 20 else "")
             )
@@ -108,9 +119,17 @@ def answer_attendance_question(question, grade):
             )
     elif not students:
         message = f"There are no students registered in grade {grade}."
-    elif any(term in question.casefold() for term in ("total attendance", "attendance records", "attendance count")):
-        total_records = Attendance.query.filter(Attendance.student_id.in_(student_ids)).count()
-        message = f"Grade {grade} has {len(students)} student(s) and {total_records} attendance record(s) in total."
+    elif any(
+        term in question.casefold()
+        for term in ("total attendance", "attendance records", "attendance count")
+    ):
+        total_records = Attendance.query.filter(
+            Attendance.student_id.in_(student_ids)
+        ).count()
+        message = (
+            f"Grade {grade} has {len(students)} student(s) and "
+            f"{total_records} attendance record(s) in total."
+        )
     elif any(term in question.casefold() for term in ("how many", "total", "count")) and any(
         term in question.casefold() for term in ("student", "learner", "registered")
     ):
@@ -122,25 +141,57 @@ def answer_attendance_question(question, grade):
             if attendance_status(student)[0].casefold() == wanted_status.casefold()
         ]
         if matching:
-            message = f"{wanted_status} on {target_date} ({len(matching)}):\n" + "\n".join(
-                attendance_line(student) for student in matching[:50]
+            message = (
+                f"{wanted_status} on {target_date} ({len(matching)}):\n"
+                + "\n".join(attendance_line(student) for student in matching[:50])
             )
             if len(matching) > 50:
                 message += f"\n…and {len(matching) - 50} more."
         else:
             message = f"No students are marked {wanted_status.lower()} on {target_date}."
-    elif any(term in question.casefold() for term in ("all students", "list students", "student list", "show students")):
-        message = f"Students in grade {grade} and their attendance on {target_date} ({len(students)}):\n" + "\n".join(
-            attendance_line(student) for student in students[:50]
+    elif any(
+        term in question.casefold()
+        for term in ("all students", "list students", "student list", "show students")
+    ):
+        message = (
+            f"Students in grade {grade} and their attendance on {target_date} "
+            f"({len(students)}):\n"
+            + "\n".join(attendance_line(student) for student in students[:50])
         )
         if len(students) > 50:
             message += f"\n…and {len(students) - 50} more."
     else:
         message = (
             f"I can answer questions about grade {grade} using the current project records. "
-            "Try “Is Piyush present today?”, “Who is absent?”, “How many students are registered?”, "
-            "“List students”, or ask for a student's attendance history. "
-            "For another date, include it as YYYY-MM-DD."
+            "Try “Is a student present today?”, “Who is absent?”, "
+            "“How many students are registered?”, “List students”, or ask for a "
+            "student's attendance history. For another date, include it as YYYY-MM-DD."
         )
 
     return message
+
+def get_general_answer(question):
+    question = question.strip().casefold()
+    question = re.sub(r"[^\w\s]", "", question)
+    question = re.sub(r"\s+", " ", question)
+
+    # Greeting
+    greetings = {
+        "hi", "hlo", "hello", "hey", "heyy",
+        "hii", "good morning", "good afternoon",
+        "good evening"
+    }
+
+    if question in greetings:
+        return "Hello! How can I help you?"
+
+    # Help
+    if question in {"help", "what can you do", "help me"}:
+        return (
+            "I can help with app setup, login and grade access, student "
+            "registration, camera and voice verification, attendance, reports, "
+            "privacy, and troubleshooting. Ask a specific question or tell me "
+            "the page and error you are seeing."
+        )
+
+    return None
